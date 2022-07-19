@@ -1,0 +1,40 @@
+__pycache__/
+*.py[cod]
+*$py.class
+# C extensions
+*.so
+build/
+eggs/
+lib/
+lib64/
+wheels
+*.egg-infos/
+*.egg
+MANIFEST
+*.log
+tmp/
+
+# model
+*.pkl
+
+# envs
+.env
+.venv
+env/
+venv/
+
+# data
+
+data/
+
+# idel
+.vscode
+.cache
+
+# experiments
+my_exps/
+work_dirs/
+
+# extra libs
+libevent*
+tags
