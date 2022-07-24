@@ -1,0 +1,33 @@
+{
+    "Server": {
+        "server_ip": "0.0.0.0" ,   
+        "server_port": 9999
+    },
+    "Detector": {
+        "mode": "ObjectDetector",
+        "ObjectDetector": {
+            "model": "/home/r/Scripts/Python/mmdeploy/work_dirs/yolox_tiny_cat_dynamic_fp16_trt",
+            "device": "cuda",
+            "device_id": 0,
+            "class_name": ["cat"],
+            "vis_config": {
+                "show_score_thre": 0.3,
+                "rect_thickness": 2,
+                "put_bbox_text": true,
+                "text_thickness": 2,
+                "text_scale": 0.7
+            }
+        },
+        "TrackerDetector": {
+
+        }
+    },
+    "LiveGo": {
+        "manger_url_template": "http://127.0.0.1:8090/control/get?room=%s", 
+        "upload_url_template": "rtmp://127.0.0.1:1935/live/%s",
+        "delete_url_template": "http://127.0.0.1:8090/control/delete?room=%s"
+    },
+    "Video": {
+        "video_url_template": "rtsp://127.0.0.1:8554/%s"
+    }
+}
