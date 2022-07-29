@@ -26,20 +26,20 @@
 namespace GLCC {
     extern const float color_list[][3];
     enum Key {ESC=27};
+    namespace constants {
+        extern std::string livego_manger_url_template;
+        extern std::string livego_upload_url_template;
+        extern std::string livego_delete_url_template;
+        extern std::string video_path_template;
+    }
 
-    struct server_context {
-        std::string server_ip="0.0.0.0";
-        u_int16_t server_port=9999;
-    };
-
-    struct client_context {
-        std::string client_ip;
-        u_int16_t client_port;
+    struct url_context {
+        std::string ip;
+        u_int16_t port;
     };
 
     struct video_context {
         std::string video_path;
-        std::string video_path_template;
         bool use_template_path=false;
     };
 
@@ -49,9 +49,6 @@ namespace GLCC {
         std::string livego_manger_url;
         std::string livego_upload_url;
         std::string livego_delete_url;
-        std::string livego_manger_url_template;
-        std::string livego_upload_url_template;
-        std::string livego_delete_url_template;
     };
 
     struct detector_init_context {
@@ -69,12 +66,11 @@ namespace GLCC {
     struct glcc_server_context {
         int state;
         // Base
-        struct server_context server_context;
-        struct client_context client_context;
+        struct url_context server_context;
+        struct url_context client_context;
         struct video_context  video_context;
         struct livego_context  livego_context;
         // Detector
-        // struct detector_init_context  detector_init_context;
         Json::Value detector_init_context;
         struct detector_run_context  detector_run_context;
     };

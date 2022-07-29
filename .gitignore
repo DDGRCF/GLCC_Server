@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 # C extensions
+.ssl/
 *.so
 build/
 eggs/

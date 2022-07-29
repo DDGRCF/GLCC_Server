@@ -2,6 +2,12 @@
 
 
 namespace GLCC {
+    namespace constants {
+        std::string livego_manger_url_template = "http://127.0.0.1:8090/control/get?room=%s";
+        std::string livego_upload_url_template = "rtmp://127.0.0.1:1935/live/%s";
+        std::string livego_delete_url_template = "http://127.0.0.1:8090/control/delete?room=%s";
+        std::string video_path_template = "rtsp://127.0.0.1:8554/%s";
+    }
 
     int get_time_file(const char* file_stem, 
                     const char * file_prefix, 

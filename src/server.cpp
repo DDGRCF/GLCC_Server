@@ -21,12 +21,8 @@ namespace GLCC {
             LOG_F(ERROR, "Parse %s failed!", config_path.c_str());
             return;
         }
-        glcc_server_context.server_context.server_ip = root["Server"]["server_ip"].asString();
-        glcc_server_context.server_context.server_port = root["Server"]["server_port"].asInt64();
-        glcc_server_context.video_context.video_path_template = root["Video"]["video_url_template"].asString();
-        glcc_server_context.livego_context.livego_manger_url_template = root["LiveGo"]["manger_url_template"].asString();
-        glcc_server_context.livego_context.livego_upload_url_template = root["LiveGo"]["upload_url_template"].asString();
-        glcc_server_context.livego_context.livego_delete_url_template = root["LiveGo"]["delete_url_template"].asString();
+        glcc_server_context.server_context.ip = root["Server"]["server_ip"].asString();
+        glcc_server_context.server_context.port = root["Server"]["server_port"].asInt64();
         glcc_server_context.detector_init_context = root["Detector"];
     }
 
@@ -36,7 +32,7 @@ namespace GLCC {
             main_callback(task, &glcc_server_context);
         });
         // TODO: figure it out
-        int ret = server.start(glcc_server_context.server_context.server_port, \
+        int ret = server.start(glcc_server_context.server_context.port, \
             "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt", 
             "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure");
 
@@ -139,6 +135,7 @@ namespace GLCC {
         }
     }
 
+
     void GLCCServer::user_register_callback(WFHttpTask * task) {
 
     }
@@ -168,7 +165,7 @@ namespace GLCC {
         char video_path[128] = {0};
         if (use_template_path) {
             snprintf(video_path, sizeof(video_path), \
-                _context->video_context.video_path_template.c_str(), video_name.c_str());
+                constants::video_path_template.c_str(), video_name.c_str());
         } else {
             std::strcpy(video_path, video_name.c_str());
         }
@@ -177,22 +174,21 @@ namespace GLCC {
             user_name.c_str(), user_password.c_str(), video_name.c_str());
         char livego_manger_url[128] = {0};
         snprintf(livego_manger_url, sizeof(livego_manger_url), \
-            _context->livego_context.livego_manger_url_template.c_str(), room_name);
+            constants::livego_manger_url_template.c_str(), room_name);
         char livego_delete_url[128] = {0};
         snprintf(livego_delete_url, sizeof(livego_delete_url), \
-            _context->livego_context.livego_delete_url_template.c_str(), room_name);
+            constants::livego_delete_url_template.c_str(), room_name);
         LOG_F(INFO, "Source Video: %s | LiveGo Manger: %s | LiveGo Delete: %s", 
             video_path, livego_manger_url, livego_delete_url);
 
         struct glcc_server_context * req_context = new struct glcc_server_context;
-        req_context->livego_context = _context->livego_context;
+        req_context->livego_context.room_name = room_name;
         req_context->livego_context.livego_manger_url = livego_manger_url;
         req_context->livego_context.livego_delete_url = livego_delete_url;
-        req_context->livego_context.room_name = room_name;
-
         req_context->video_context.video_path = video_path;
         req_context->detector_init_context = _context->detector_init_context;
         req_context->detector_run_context = _context->detector_run_context;
+
         // req_context->livego_context = _context->livego_context.
         SeriesWork * series = series_of(task); 
         series->set_context(req_context);
@@ -281,15 +277,15 @@ namespace GLCC {
                 goto del;
             }
             state = root["status"].asInt();
-            std::string channel = root["data"].asString();
+            std::string key = root["data"].asString();
             char livego_upload_url[128] = {0};
             snprintf(livego_upload_url, sizeof(livego_upload_url), \
-                context->livego_context.livego_upload_url_template.c_str(), channel.c_str());
+                constants::livego_upload_url_template.c_str(), key.c_str());
             context->detector_run_context.upload_path = livego_upload_url;
             context->detector_run_context.video_path = context->video_context.video_path;
-            context->livego_context.room_key = channel;
+            context->livego_context.room_key = key;
             LOG_F(INFO, "LiveGO UpLoad: %s", livego_upload_url);
-            WFGoTask * go_task = WFTaskFactory::create_go_task(channel.c_str(), run_detector, channel, context);
+            WFGoTask * go_task = WFTaskFactory::create_go_task(key.c_str(), run_detector, key, context);
 
             go_task->set_callback([](WFGoTask * task) {
                 struct glcc_server_context * context = (struct glcc_server_context *)task->user_data;
@@ -320,7 +316,7 @@ namespace GLCC {
             set_common_resp(upstream_resq, "200", "OK");
             Json::Value reply;
             reply["room_name"] = context->livego_context.room_name;
-            reply["room_key"] = channel;
+            reply["room_key"] = key;
             upstream_resq->append_output_body(reply.toStyledString());
             return;
         } else {
