@@ -1,0 +1,16 @@
+{
+    "version": "0.5.0",
+    "task": "Detector",
+    "models": [
+        {
+            "name": "yolox",
+            "net": "end2end.engine",
+            "weights": "",
+            "backend": "tensorrt",
+            "precision": "FP16",
+            "batch_size": 1,
+            "dynamic_shape": true
+        }
+    ],
+    "customs": []
+}
