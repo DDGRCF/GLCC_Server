@@ -3,10 +3,43 @@
 
 namespace GLCC {
     namespace constants {
+        // u_int16_t livego_manger_url_prot = "";
+        // u_int16_t livego_upload_url_port = "";
+        // u_int16_t livego_delete_url_port = "";
         std::string livego_manger_url_template = "http://127.0.0.1:8090/control/get?room=%s";
         std::string livego_upload_url_template = "rtmp://127.0.0.1:1935/live/%s";
         std::string livego_delete_url_template = "http://127.0.0.1:8090/control/delete?room=%s";
         std::string video_path_template = "rtsp://127.0.0.1:8554/%s";
+        std::string mysql_url_root = "mysql://root:9696@127.0.0.1:3306";
+        std::string mysql_url_template = "mysql://root:9696@127.0.0.1:3306/%s";
+        std::string ssl_crt_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt";
+        std::string ssl_key_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure";
+        std::string mysql_create_db_command = R"(
+            CREATE DATABASE IF NOT EXISTS glccserver;
+            CREATE table IF NOT EXISTS glccserver.User(username INTEGER NOT NULL UNIQUE, password VARCHAR(20) NOT NULL, usernickname VARCHAR(20), PRIMARY KEY (username));
+            CREATE table IF NOT EXISTS glccserver.VideoDevice(room_key VARCHAR(50) NOT NULL UNIQUE, username INTEGER NOT NULL, room_name VARCHAR(50), 
+                video_from_url VARCHAR(100), video_to_url VARCHAR(100), PRIMARY KEY (room_key), FOREIGN KEY (username) REFERENCES glccserver.User(username));
+
+            DROP TRIGGER if EXISTS glccserver.after_user_delete;
+            CREATE TRIGGER glccserver.after_user_delete
+            BEFORE DELETE ON glccserver.User FOR EACH ROW
+            BEGIN
+                DELETE from glccserver.VideoDevice WHERE username=OLD.username;
+            END;
+
+            DROP TRIGGER IF EXISTS glccserver.before_videodevice_insert;
+            CREATE TRIGGER glccserver.before_videodevice_insert
+            BEFORE INSERT ON glccserver.VideoDevice FOR EACH ROW
+            BEGIN
+                declare num int default 0;
+                declare msg varchar(100);
+                select count(*) into num from glccserver.User where username=NEW.username;
+                if num <= 0 then
+                    set msg=concat("Find the ", NEW.username, "failed!");
+                	signal sqlstate '45000' set message_text=msg;
+                end if;
+            END;
+        )";
     }
 
     int get_time_file(const char* file_stem, 

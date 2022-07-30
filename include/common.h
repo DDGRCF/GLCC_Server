@@ -31,6 +31,11 @@ namespace GLCC {
         extern std::string livego_upload_url_template;
         extern std::string livego_delete_url_template;
         extern std::string video_path_template;
+        extern std::string mysql_url_template;
+        extern std::string mysql_url_root;
+        extern std::string mysql_create_db_command;
+        extern std::string ssl_crt_path;
+        extern std::string ssl_key_path;
     }
 
     struct url_context {

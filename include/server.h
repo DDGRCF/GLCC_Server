@@ -8,6 +8,8 @@
 #include <workflow/WFAlgoTaskFactory.h>
 #include <workflow/HttpUtil.h>
 #include <workflow/HttpMessage.h>
+#include <workflow/MySQLResult.h>
+#include <workflow/Workflow.h>
 
 namespace GLCC {
     class GLCCServer
@@ -15,7 +17,8 @@ namespace GLCC {
         public:
             GLCCServer(const std::string config_path);
             int run();
-            static WFFacilities::WaitGroup wait_group;
+            static WFFacilities::WaitGroup server_wait_group;
+            static WFFacilities::WaitGroup mysql_wait_group;
             static void sig_handler(int signo);
             static bool parse_request(WFHttpTask * task, 
                                         std::string method, 
@@ -23,6 +26,8 @@ namespace GLCC {
             static void get_connection_infos(WFHttpTask * task, void * context);
             static Detector * register_detector(std::string & key, const Json::Value & detector_init_context, int * state);
             static int cancel_detector(std::string & key);
+            static int parse_mysql_response(WFMySQLTask * task, std::unordered_map<std::string, std::vector<protocol::MySQLCell>> & results);
+            static int parse_mysql_response(WFMySQLTask * task);
         protected:
             struct glcc_server_context glcc_server_context;
 
@@ -32,6 +37,8 @@ namespace GLCC {
             static void user_login_callback(WFHttpTask * task, void * context);
             static void user_register_callback(WFHttpTask * task);
             static void hello_world_callback(WFHttpTask * task);
+            // mysql
+            static void create_db_callbck(WFMySQLTask * task, void * context);
             // detector
             static void dect_video_callback(WFHttpTask * task, void * context);
             static void disdect_video_callback(WFHttpTask * task, void * context);

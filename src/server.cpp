@@ -9,7 +9,8 @@
 
 namespace GLCC {
 
-    WFFacilities::WaitGroup GLCCServer::wait_group(1);
+    WFFacilities::WaitGroup GLCCServer::server_wait_group(1);
+    WFFacilities::WaitGroup GLCCServer::mysql_wait_group(1);
 
     GLCCServer::GLCCServer(const std::string config_path) {
         std::ifstream ifs;
@@ -28,23 +29,53 @@ namespace GLCC {
 
     int GLCCServer::run() {
         signal(SIGINT, sig_handler);
-        WFHttpServer server([&](WFHttpTask * task) {
-            main_callback(task, &glcc_server_context);
+        signal(SIGTERM, sig_handler);
+        int state = WFT_STATE_TOREPLY;
+        WFMySQLTask * task = WFTaskFactory::create_mysql_task(
+            constants::mysql_url_root, 0, [&](WFMySQLTask * task) {
+                create_db_callbck(task, &state);
         });
-        // TODO: figure it out
-        int ret = server.start(glcc_server_context.server_context.port, \
-            "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt", 
-            "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure");
+        task->get_req()->set_query(constants::mysql_create_db_command);
+        task->start();
+        mysql_wait_group.wait(); 
+        if (state == WFT_STATE_SUCCESS) {
+            WFHttpServer server([&](WFHttpTask * task) {
+                main_callback(task, &glcc_server_context);
+            });
 
-        if (ret == 0) {
-            wait_group.wait();
-            server.stop();
+            // TODO: figure it out
+            int ret = server.start(glcc_server_context.server_context.port, 
+                constants::ssl_crt_path.c_str(), 
+                constants::ssl_key_path.c_str());
+            if (ret == 0) {
+                server_wait_group.wait();
+                server.stop();
+            } else {
+                LOG_F(ERROR, "Start server failed!");
+                return -1;
+            }
+            return 0;
         } else {
-            LOG_F(ERROR, "Start server failed!");
+            LOG_F(ERROR, "Init mysql databases failed!");
             return -1;
         }
-        return 0;
     }
+
+
+    void GLCCServer::create_db_callbck(WFMySQLTask * task, void * context) {
+        int * ex_state_ptr = (int *)context;
+        int state = task->get_state();
+        int error = task->get_error();
+        if (state == WFT_STATE_SUCCESS) {
+            parse_mysql_response(task);
+            *ex_state_ptr = WFT_STATE_SUCCESS;
+        } else {
+            LOG_F(ERROR, "Init DB failed! Code: %d", error);
+            *ex_state_ptr = state;
+        }
+        mysql_wait_group.done();
+    }
+
 
     void GLCCServer::main_callback(WFHttpTask * task, void * context) {
         std::stringstream connection_infos;
@@ -53,6 +84,7 @@ namespace GLCC {
 
         REGEX_FUNC(login_callback, "POST", "/login.*", task, context);
         REGEX_FUNC(hello_world_callback, "GET", "/hello_world", task);
+        REGEX_FUNC(user_register_callback, "POST", "/register", task);
     }
 
     void GLCCServer::hello_world_callback(WFHttpTask * task) {
@@ -137,7 +169,10 @@ namespace GLCC {
 
 
     void GLCCServer::user_register_callback(WFHttpTask * task) {
-
+        int state = task->get_state();
+        int error = task->get_error();
+        protocol::HttpRequest * req = task->get_req();
+        protocol::HttpResponse * resp = task->get_resp();
     }
 
     void GLCCServer::dect_video_callback(WFHttpTask * task, void * context) {
@@ -164,19 +199,19 @@ namespace GLCC {
         std::string video_name = root["video_name"].asString();
         char video_path[128] = {0};
         if (use_template_path) {
-            snprintf(video_path, sizeof(video_path), \
+            snprintf(video_path, sizeof(video_path), 
                 constants::video_path_template.c_str(), video_name.c_str());
         } else {
             std::strcpy(video_path, video_name.c_str());
         }
         char room_name[128] = {0};
-        snprintf(room_name, sizeof(room_name), "%s-%s-%s", \
+        snprintf(room_name, sizeof(room_name), "%s-%s-%s", 
             user_name.c_str(), user_password.c_str(), video_name.c_str());
         char livego_manger_url[128] = {0};
-        snprintf(livego_manger_url, sizeof(livego_manger_url), \
+        snprintf(livego_manger_url, sizeof(livego_manger_url), 
             constants::livego_manger_url_template.c_str(), room_name);
         char livego_delete_url[128] = {0};
-        snprintf(livego_delete_url, sizeof(livego_delete_url), \
+        snprintf(livego_delete_url, sizeof(livego_delete_url), 
             constants::livego_delete_url_template.c_str(), room_name);
         LOG_F(INFO, "Source Video: %s | LiveGo Manger: %s | LiveGo Delete: %s", 
             video_path, livego_manger_url, livego_delete_url);
@@ -279,7 +314,7 @@ namespace GLCC {
             state = root["status"].asInt();
             std::string key = root["data"].asString();
             char livego_upload_url[128] = {0};
-            snprintf(livego_upload_url, sizeof(livego_upload_url), \
+            snprintf(livego_upload_url, sizeof(livego_upload_url), 
                 constants::livego_upload_url_template.c_str(), key.c_str());
             context->detector_run_context.upload_path = livego_upload_url;
             context->detector_run_context.video_path = context->video_context.video_path;
@@ -357,7 +392,8 @@ namespace GLCC {
 
     void GLCCServer::sig_handler(int signo) {
         LOG_F(INFO, "Get signal code: %d", signo);
-        GLCCServer::wait_group.done();
+        GLCCServer::server_wait_group.done();
+        GLCCServer::mysql_wait_group.done();
     }
 
     bool GLCCServer::parse_request(WFHttpTask * task, 
@@ -450,5 +486,270 @@ namespace GLCC {
         req->add_header_pair("User-Agent", "GLCC Server Implemented by WorkFlow");
         req->add_header_pair("Connection", status);
         return req;
+    }
+
+    int GLCCServer::parse_mysql_response(WFMySQLTask * task) {
+        protocol::MySQLResponse *resp = task->get_resp();
+        protocol::MySQLResultCursor cursor(resp);
+        const protocol::MySQLField * const * fields;
+        std::vector<protocol::MySQLCell> arr;
+        do {
+            if (cursor.get_cursor_status() != MYSQL_STATUS_GET_RESULT &&
+                cursor.get_cursor_status() != MYSQL_STATUS_OK)
+            {
+                break;
+            }
+
+            LOG_F(INFO, "---------------- RESULT SET ----------------\n");
+
+            if (cursor.get_cursor_status() == MYSQL_STATUS_GET_RESULT)
+            {
+                LOG_F(INFO, "cursor_status=%d field_count=%u rows_count=%u\n",
+                        cursor.get_cursor_status(), cursor.get_field_count(),
+                        cursor.get_rows_count());
+
+                //nocopy api
+                fields = cursor.fetch_fields();
+                for (int i = 0; i < cursor.get_field_count(); i++)
+                {
+                    if (i == 0)
+                    {
+                        LOG_F(INFO, "db=%s table=%s\n",
+                            fields[i]->get_db().c_str(), fields[i]->get_table().c_str());
+                        LOG_F(INFO, "  ---------- COLUMNS ----------\n");
+                    }
+                    LOG_F(INFO, "  name[%s] type[%s]\n",
+                            fields[i]->get_name().c_str(),
+                            datatype2str(fields[i]->get_data_type()));
+                }
+                LOG_F(INFO, "  _________ COLUMNS END _________\n\n");
+
+                while (cursor.fetch_row(arr))
+                {
+                    LOG_F(INFO, "  ------------ ROW ------------\n");
+                    for (size_t i = 0; i < arr.size(); i++)
+                    {
+                        LOG_F(INFO, "  [%s][%s]", fields[i]->get_name().c_str(),
+                                datatype2str(arr[i].get_data_type()));
+                        if (arr[i].is_string())
+                        {
+                            std::string res = arr[i].as_string();
+                            if (res.length() == 0)
+                                LOG_F(INFO, "[\"\"]\n");
+                            else 
+                                LOG_F(INFO, "[%s]\n", res.c_str());
+                        } else if (arr[i].is_int()) {
+                            LOG_F(INFO, "[%d]\n", arr[i].as_int());
+                        } else if (arr[i].is_ulonglong()) {
+                            LOG_F(INFO, "[%llu]\n", arr[i].as_ulonglong());
+                        } else if (arr[i].is_float()) {
+                            const void *ptr;
+                            size_t len;
+                            int data_type;
+                            arr[i].get_cell_nocopy(&ptr, &len, &data_type);
+                            size_t pos;
+                            for (pos = 0; pos < len; pos++)
+                                if (*((const char *)ptr + pos) == '.')
+                                    break;
+                            if (pos != len)
+                                pos = len - pos - 1;
+                            else
+                                pos = 0;
+                            LOG_F(INFO, "[%.*f]\n", (int)pos, arr[i].as_float());
+                        } else if (arr[i].is_double()) {
+                            const void *ptr;
+                            size_t len;
+                            int data_type;
+                            arr[i].get_cell_nocopy(&ptr, &len, &data_type);
+                            size_t pos;
+                            for (pos = 0; pos < len; pos++)
+                                if (*((const char *)ptr + pos) == '.')
+                                    break;
+                            if (pos != len)
+                                pos = len - pos - 1;
+                            else
+                                pos= 0;
+                            LOG_F(INFO, "[%.*lf]\n", (int)pos, arr[i].as_double());
+                        } else if (arr[i].is_date()) {
+                            LOG_F(INFO, "[%s]\n", arr[i].as_string().c_str());
+                        } else if (arr[i].is_time()) {
+                            LOG_F(INFO, "[%s]\n", arr[i].as_string().c_str());
+                        } else if (arr[i].is_datetime()) {
+                            LOG_F(INFO, "[%s]\n", arr[i].as_string().c_str());
+                        } else if (arr[i].is_null()) {
+                            LOG_F(INFO, "[NULL]\n");
+                        } else {
+                            std::string res = arr[i].as_binary_string();
+                            if (res.length() == 0)
+                                LOG_F(INFO, "[\"\"]\n");
+                            else 
+                                LOG_F(INFO, "[%s]\n", res.c_str());
+                        }
+                    }
+                    LOG_F(INFO, "  __________ ROW END __________\n");
+                }
+            }
+            else if (cursor.get_cursor_status() == MYSQL_STATUS_OK)
+            {
+                LOG_F(INFO, "  OK. %llu ", cursor.get_affected_rows());
+                if (cursor.get_affected_rows() == 1)
+                    LOG_F(INFO, "row ");
+                else
+                    LOG_F(INFO, "rows ");
+                LOG_F(INFO, "affected. %d warnings. insert_id=%llu. %s\n",
+                        cursor.get_warnings(), cursor.get_insert_id(),
+                        cursor.get_info().c_str());
+            }
+
+            LOG_F(INFO, "________________ RESULT SET END ________________\n\n");
+        } while (cursor.next_result_set());
+
+
+        if (resp->get_packet_type() == MYSQL_PACKET_ERROR)
+        {
+            LOG_F(ERROR, "Error_code=%d %s\n",
+                    task->get_resp()->get_error_code(),
+                    task->get_resp()->get_error_msg().c_str());
+            return WFT_STATE_TASK_ERROR;
+        }
+        else if (resp->get_packet_type() == MYSQL_PACKET_OK) // just check origin APIs
+        {
+            LOG_F(INFO, "OK. %llu ", task->get_resp()->get_affected_rows());
+            if (task->get_resp()->get_affected_rows() == 1)
+                LOG_F(INFO, "row ");
+            else
+                LOG_F(INFO, "rows ");
+            LOG_F(INFO, "affected. %d warnings. insert_id=%llu. %s\n",
+                    task->get_resp()->get_warnings(),
+                    task->get_resp()->get_last_insert_id(),
+                    task->get_resp()->get_info().c_str());
+        }
+
+        return WFT_STATE_SUCCESS;
+    }
+
+    int GLCCServer::parse_mysql_response(WFMySQLTask * task, std::unordered_map<std::string, std::vector<protocol::MySQLCell>> & results) {
+        protocol::MySQLResponse *resp = task->get_resp();
+        protocol::MySQLResultCursor cursor(resp);
+        const protocol::MySQLField * const * fields;
+        std::vector<protocol::MySQLCell> arr;
+        do {
+            if (cursor.get_cursor_status() != MYSQL_STATUS_GET_RESULT) {
+                break;
+            }
+
+            LOG_F(INFO, "---------------- RESULT SET ----------------\n");
+
+            LOG_F(INFO, "cursor_status=%d field_count=%u rows_count=%u\n",
+                    cursor.get_cursor_status(), cursor.get_field_count(),
+                    cursor.get_rows_count());
+
+            //nocopy api
+            fields = cursor.fetch_fields();
+            for (int i = 0; i < cursor.get_field_count(); i++) {
+                if (i == 0)
+                {
+                    LOG_F(INFO, "db=%s table=%s\n",
+                        fields[i]->get_db().c_str(), fields[i]->get_table().c_str());
+                    LOG_F(INFO, "  ---------- COLUMNS ----------\n");
+                }
+                LOG_F(INFO, "  name[%s] type[%s]\n",
+                        fields[i]->get_name().c_str(),
+                        datatype2str(fields[i]->get_data_type()));
+            }
+            LOG_F(INFO, "  _________ COLUMNS END _________\n\n");
+
+            while (cursor.fetch_row(arr)) {
+                LOG_F(INFO, "  ------------ ROW ------------\n");
+                for (size_t i = 0; i < arr.size(); i++)
+                {
+                    std::string column_name = fields[i]->get_name();
+                    std::vector<protocol::MySQLCell> row_result;
+                    LOG_F(INFO, "  [%s][%s]",  column_name.c_str(),
+                            datatype2str(arr[i].get_data_type()));
+                    if (arr[i].is_string())
+                    {
+                        std::string res = arr[i].as_string();
+                        if (res.length() == 0)
+                            LOG_F(INFO, "[\"\"]\n");
+                        else 
+                            LOG_F(INFO, "[%s]\n", res.c_str());
+                    } else if (arr[i].is_int()) {
+                        LOG_F(INFO, "[%d]\n", arr[i].as_int());
+                    } else if (arr[i].is_ulonglong()) {
+                        LOG_F(INFO, "[%llu]\n", arr[i].as_ulonglong());
+                    } else if (arr[i].is_float()) {
+                        const void *ptr;
+                        size_t len;
+                        int data_type;
+                        arr[i].get_cell_nocopy(&ptr, &len, &data_type);
+                        size_t pos;
+                        for (pos = 0; pos < len; pos++)
+                            if (*((const char *)ptr + pos) == '.')
+                                break;
+                        if (pos != len)
+                            pos = len - pos - 1;
+                        else
+                            pos = 0;
+                        LOG_F(INFO, "[%.*f]\n", (int)pos, arr[i].as_float());
+                    } else if (arr[i].is_double()) {
+                        const void *ptr;
+                        size_t len;
+                        int data_type;
+                        arr[i].get_cell_nocopy(&ptr, &len, &data_type);
+                        size_t pos;
+                        for (pos = 0; pos < len; pos++)
+                            if (*((const char *)ptr + pos) == '.')
+                                break;
+                        if (pos != len)
+                            pos = len - pos - 1;
+                        else
+                            pos= 0;
+                        LOG_F(INFO, "[%.*lf]\n", (int)pos, arr[i].as_double());
+                    } else if (arr[i].is_date()) {
+                        LOG_F(INFO, "[%s]\n", arr[i].as_string().c_str());
+                    } else if (arr[i].is_time()) {
+                        LOG_F(INFO, "[%s]\n", arr[i].as_string().c_str());
+                    } else if (arr[i].is_datetime()) {
+                        LOG_F(INFO, "[%s]\n", arr[i].as_string().c_str());
+                    } else if (arr[i].is_null()) {
+                        LOG_F(INFO, "[NULL]\n");
+                    } else {
+                        std::string res = arr[i].as_binary_string();
+                        if (res.length() == 0)
+                            LOG_F(INFO, "[\"\"]\n");
+                        else 
+                            LOG_F(INFO, "[%s]\n", res.c_str());
+                    }
+                    results[column_name].emplace_back(std::move(arr[i]));
+                }
+                LOG_F(INFO, "  __________ ROW END __________\n");
+            }
+            LOG_F(INFO, "________________ RESULT SET END ________________\n\n");
+        } while (cursor.next_result_set());
+
+
+        if (resp->get_packet_type() == MYSQL_PACKET_ERROR)
+        {
+            LOG_F(INFO, "ERROR. error_code=%d %s\n",
+                    task->get_resp()->get_error_code(),
+                    task->get_resp()->get_error_msg().c_str());
+            return WFT_STATE_TASK_ERROR;
+        }
+        else if (resp->get_packet_type() == MYSQL_PACKET_OK) // just check origin APIs
+        {
+            LOG_F(INFO, "OK. %llu ", task->get_resp()->get_affected_rows());
+            if (task->get_resp()->get_affected_rows() == 1)
+                LOG_F(INFO, "row ");
+            else
+                LOG_F(INFO, "rows ");
+            LOG_F(INFO, "affected. %d warnings. insert_id=%llu. %s\n",
+                    task->get_resp()->get_warnings(),
+                    task->get_resp()->get_last_insert_id(),
+                    task->get_resp()->get_info().c_str());
+        }
+
+        return WFT_STATE_SUCCESS;
+
     }
 }

@@ -29,5 +29,7 @@
     },
     "Video": {
         "video_url_template": "rtsp://127.0.0.1:8554/%s"
+    },
+    "Mysql": {
     }
 }
