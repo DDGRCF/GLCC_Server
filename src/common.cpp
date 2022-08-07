@@ -6,38 +6,79 @@ namespace GLCC {
         // u_int16_t livego_manger_url_prot = "";
         // u_int16_t livego_upload_url_port = "";
         // u_int16_t livego_delete_url_port = "";
-        std::string livego_manger_url_template = "http://127.0.0.1:8090/control/get?room=%s";
+        std::string livego_control_url_base = "http://127.0.0.1:8090/control";
+        std::string livego_manger_url_template = livego_control_url_base + "/get?room=%s";
         std::string livego_upload_url_template = "rtmp://127.0.0.1:1935/live/%s";
-        std::string livego_delete_url_template = "http://127.0.0.1:8090/control/delete?room=%s";
+        std::string livego_delete_url_template = livego_control_url_base + "/delete?room=%s";
+        std::string livego_pull_switch_tempalte = livego_control_url_base + "/pull?&oper=%s&app=live&name=%s&url=" + livego_upload_url_template;
+        std::string livego_push_switch_template = livego_control_url_base + "/push?&oper=%s&app=live&name=%s&url=" + livego_upload_url_template;
         std::string video_path_template = "rtsp://127.0.0.1:8554/%s";
-        std::string mysql_url_root = "mysql://root:9696@127.0.0.1:3306";
-        std::string mysql_url_template = "mysql://root:9696@127.0.0.1:3306/%s";
+        std::string mysql_root_url = "mysql://root:9696@127.0.0.1:3306";
+        std::string mysql_glccserver_url = mysql_root_url + "/glccserver";
+        std::string mysql_url_template = mysql_root_url + "%s";
         std::string ssl_crt_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt";
         std::string ssl_key_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure";
         std::string mysql_create_db_command = R"(
+            set global log_bin_trust_function_creators = 1;
             CREATE DATABASE IF NOT EXISTS glccserver;
-            CREATE table IF NOT EXISTS glccserver.User(username INTEGER NOT NULL UNIQUE, password VARCHAR(20) NOT NULL, usernickname VARCHAR(20), PRIMARY KEY (username));
-            CREATE table IF NOT EXISTS glccserver.VideoDevice(room_key VARCHAR(50) NOT NULL UNIQUE, username INTEGER NOT NULL, room_name VARCHAR(50), 
-                video_from_url VARCHAR(100), video_to_url VARCHAR(100), PRIMARY KEY (room_key), FOREIGN KEY (username) REFERENCES glccserver.User(username));
+            CREATE TABLE IF NOT EXISTS glccserver.User(username VARCHAR(20) NOT NULL UNIQUE, password VARCHAR(20) NOT NULL, nickname VARCHAR(20) NOT NULL, PRIMARY KEY (username));
+            CREATE TABLE IF NOT EXISTS glccserver.Video(video_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_url VARCHAR(50) NOT NULL, PRIMARY KEY (video_name, username), 
+                FOREIGN KEY (username) REFERENCES glccserver.User(username));
+            CREATE TABLE IF NOT EXISTS glccserver.Room(room_name VARCHAR(50) NOT NULL UNIQUE, username VARCHAR(20) NOT NULL, room_key VARCHAR(50) NOT NULL,
+                video_name VARCHAR(20) NOT NULL, num_connection INTEGER NOT NULL, start_time TIMESTAMP NOT NULL, end_time TIMESTAMP NOT NULL, PRIMARY KEY (room_name), 
+                FOREIGN KEY (username) REFERENCES glccserver.User(username),
+                FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
+
+            DROP FUNCTION if EXISTS func_time_compare;
+            CREATE 
+                FUNCTION func_time_compare(start_time TIMESTAMP, end_time TIMESTAMP)
+                RETURNS INT
+            BEGIN
+                DECLARE ctime INT;
+                DECLARE res INT;
+                set ctime = TIMESTAMPDIFF(SECOND, start_time, end_time);
+                set res = IF(ctime > 0, 1, -1);
+                return res;
+            END;
 
             DROP TRIGGER if EXISTS glccserver.after_user_delete;
             CREATE TRIGGER glccserver.after_user_delete
             BEFORE DELETE ON glccserver.User FOR EACH ROW
             BEGIN
-                DELETE from glccserver.VideoDevice WHERE username=OLD.username;
+                DELETE from glccserver.Video WHERE username=OLD.username;
+                DELETE from glccserver.Room WHERE username=OLD.username;
             END;
 
-            DROP TRIGGER IF EXISTS glccserver.before_videodevice_insert;
-            CREATE TRIGGER glccserver.before_videodevice_insert
-            BEFORE INSERT ON glccserver.VideoDevice FOR EACH ROW
+            DROP TRIGGER IF EXISTS glccserver.before_room_insert;
+            CREATE TRIGGER glccserver.before_room_insert
+            BEFORE INSERT ON glccserver.Room FOR EACH ROW
             BEGIN
-                declare num int default 0;
-                declare msg varchar(100);
-                select count(*) into num from glccserver.User where username=NEW.username;
-                if num <= 0 then
-                    set msg=concat("Find the ", NEW.username, "failed!");
+                DECLARE num INT DEFAULT 0;
+                DECLARE compare TINYINT DEFAULT 0;
+                DECLARE msg VARCHAR(100);
+                SELECT COUNT(*) INTO num FROM glccserver.Video WHERE video_name=NEW.video_name AND username=NEW.username;
+                IF num <= 0 THEN 
+                    set msg=concat("Room: Find ", "username: ", NEW.username,  ", video name: ", NEW.video_name, " failed!");
+                    signal sqlstate "45000" set message_text=msg;
+                END IF;
+                CALL glccserver.proc_time_compare(NEW.start_time, NEW.end_time, compare);
+                IF compare < 0 THEN
+                    SET msg=concat("Room: Insert ", "start_time: ", NEW.start_time, " end_time: ", NEW.end_time, " failed!");
+                    signal sqlstate "45000" set message_text=msg;
+                END IF;
+            END;
+
+            DROP TRIGGER IF EXISTS glccserver.before_video_insert;
+            CREATE TRIGGER glccserver.before_video_insert
+            BEFORE INSERT ON glccserver.Video FOR EACH ROW
+            BEGIN
+                DECLARE num INT DEFAULT 0;
+                DECLARE msg VARCHAR(100);
+                SELECT COUNT(*) INTO num FROM glccserver.User WHERE username=NEW.username;
+                IF num <= 0 THEN
+                    set msg=concat("Video: Find the ", NEW.username, " failed!");
                 	signal sqlstate '45000' set message_text=msg;
-                end if;
+                END IF;
             END;
         )";
     }

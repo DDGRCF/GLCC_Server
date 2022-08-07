@@ -21,65 +21,72 @@
 #include <loguru.hpp>
 #include <jsoncpp/json/json.h>
 #include <fstream>
+#include <set>
 
 
 namespace GLCC {
     extern const float color_list[][3];
     enum Key {ESC=27};
     namespace constants {
+        extern std::string livego_control_url_base;
         extern std::string livego_manger_url_template;
         extern std::string livego_upload_url_template;
         extern std::string livego_delete_url_template;
+        extern std::string livego_pull_switch_tempalte;
+        extern std::string livego_push_switch_template;
         extern std::string video_path_template;
+        extern std::string mysql_root_url;
+        extern std::string mysql_glccserver_url;
         extern std::string mysql_url_template;
-        extern std::string mysql_url_root;
         extern std::string mysql_create_db_command;
         extern std::string ssl_crt_path;
         extern std::string ssl_key_path;
     }
 
-    struct url_context {
+    typedef struct url_context {
         std::string ip;
         u_int16_t port;
-    };
+    } url_context_t;
 
-    struct video_context {
+    typedef struct video_context {
         std::string video_path;
         bool use_template_path=false;
-    };
+    } video_context_t;
 
-    struct livego_context {
+    typedef struct livego_context {
         std::string room_name;
         std::string room_key;
         std::string livego_manger_url;
         std::string livego_upload_url;
         std::string livego_delete_url;
-    };
+        std::string livego_pull_switch_url;
+        std::string livego_push_switch_url;
+    } livego_context_t;
 
-    struct detector_init_context {
+    typedef struct detector_init_context {
         std::string model_path=nullptr; // camera 0
         std::string device_name="cpu"; // cuda
         int device_id=0; // 0
-    };
+    } detector_init_context_t;
 
-    struct detector_run_context {
+    typedef struct detector_run_context {
         std::string video_path; // video to be sampled
         std::string upload_path; // rtmp to be load
         Json::Value vis_params;
-    };
+    } detector_run_context_t;
 
-    struct glcc_server_context {
+    typedef struct glcc_server_context {
         int state;
+        int error;
         // Base
-        struct url_context server_context;
-        struct url_context client_context;
-        struct video_context  video_context;
-        struct livego_context  livego_context;
+        url_context_t server_context;
+        url_context_t client_context;
+        video_context_t  video_context;
+        livego_context_t  livego_context;
         // Detector
         Json::Value detector_init_context;
-        struct detector_run_context  detector_run_context;
-    };
-
+        detector_run_context_t  detector_run_context;
+    } glcc_server_context_t;
 
     template <class ProductType_t>
     class ProductFactory

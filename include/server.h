@@ -23,18 +23,27 @@ namespace GLCC {
             static bool parse_request(WFHttpTask * task, 
                                         std::string method, 
                                         std::string rex);
-            static void get_connection_infos(WFHttpTask * task, void * context);
-            static Detector * register_detector(std::string & key, const Json::Value & detector_init_context, int * state);
-            static int cancel_detector(std::string & key);
+            static void get_connection_infos(WFHttpTask * task, std::iostream & context);
+            static void get_connection_infos(WFHttpTask * task, Json::Value & context);
+            static void get_server_infos(WFHttpServer * server, std::iostream & context);
+            static void get_server_infos(WFHttpServer * server, Json::Value & context);
             static int parse_mysql_response(WFMySQLTask * task, std::unordered_map<std::string, std::vector<protocol::MySQLCell>> & results);
             static int parse_mysql_response(WFMySQLTask * task);
-        protected:
-            struct glcc_server_context glcc_server_context;
 
+            static Detector * register_detector(std::string & room_name, const Json::Value & detector_init_context, int * state);
+            static void run_detector(std::string & room_name, std::shared_ptr<glcc_server_context_t> context);
+            static int cancel_detector(std::string & room_name, int mode=0);
+            static int parse_url(std::string & url, std::unordered_map<std::string, std::string> & results_map);
+            static int parse_url(const char * url, std::unordered_map<std::string, std::string> & results_map);
+            static int parse_room_url(std::string & url, std::unordered_map<std::string, std::string> & results_map);
+            static int parse_room_url(const char * url, std::unordered_map<std::string, std::string> & results_map);
+        protected:
+            glcc_server_context_t glcc_server_context;
+
+            static void login_activity(WFHttpTask * task, void * context);
             // base
             static void main_callback(WFHttpTask * task, void * context);
             static void login_callback(WFHttpTask * task, void * context);
-            static void user_login_callback(WFHttpTask * task, void * context);
             static void user_register_callback(WFHttpTask * task);
             static void hello_world_callback(WFHttpTask * task);
             // mysql
@@ -44,9 +53,12 @@ namespace GLCC {
             static void disdect_video_callback(WFHttpTask * task, void * context);
             static void video_put_lattice_callback(WFHttpTask * task, void * context);
             static void video_disput_lattice_callback(WFHttpTask * Task, void * context);
-            static void run_detector(std::string key, struct glcc_server_context * context);
+            static void detector_timer_callback(WFTimerTask * timer);
+            // video
+            static void register_video_callback(WFHttpTask * task, void * context);
+            static void delete_video_callback(WFHttpTask * task, void * context);
             // livego
-            static void livego_manger_callback(WFHttpTask * task);
+            static void livego_manger_callback(WFHttpTask * task, std::shared_ptr<glcc_server_context_t> context);
             // common
             static protocol::HttpResponse * set_common_resp(protocol::HttpResponse * resp, 
                                                             std::string code="200", std::string phrase="OK",
