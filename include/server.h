@@ -30,9 +30,9 @@ namespace GLCC {
             static int parse_mysql_response(WFMySQLTask * task, std::unordered_map<std::string, std::vector<protocol::MySQLCell>> & results);
             static int parse_mysql_response(WFMySQLTask * task);
 
-            static Detector * register_detector(std::string & room_name, const Json::Value & detector_init_context, int * state);
             static void run_detector(std::string & room_name, std::shared_ptr<glcc_server_context_t> context);
-            static int cancel_detector(std::string & room_name, int mode=0);
+            static Detector * register_detector(std::string & room_name, std::shared_ptr<glcc_server_context_t> context, int num_start_connection=1);
+            static int cancel_detector(std::string & room_name, int mode=WAKE_CANCEL);
             static int parse_url(std::string & url, std::unordered_map<std::string, std::string> & results_map);
             static int parse_url(const char * url, std::unordered_map<std::string, std::string> & results_map);
             static int parse_room_url(std::string & url, std::unordered_map<std::string, std::string> & results_map);
@@ -54,6 +54,7 @@ namespace GLCC {
             static void video_put_lattice_callback(WFHttpTask * task, void * context);
             static void video_disput_lattice_callback(WFHttpTask * Task, void * context);
             static void detector_timer_callback(WFTimerTask * timer);
+            static void register_map(std::string & mode, std::string & room_name, void * context);
             // video
             static void register_video_callback(WFHttpTask * task, void * context);
             static void delete_video_callback(WFHttpTask * task, void * context);

@@ -22,16 +22,22 @@
 #include <jsoncpp/json/json.h>
 #include <fstream>
 #include <set>
+#include <atomic>
 
 
 namespace GLCC {
     extern const float color_list[][3];
     enum Key {ESC=27};
+    enum CancelMode {NORMAL_CANCEL=0, FORCE_CANCEL=1, WAKE_CANCEL=2};
     namespace constants {
+        extern const long num_microsecond_per_second;
+        extern const long long max_detector_live_time;
+        extern const long long interval_to_watch_detector;
         extern std::string livego_control_url_base;
         extern std::string livego_manger_url_template;
         extern std::string livego_upload_url_template;
         extern std::string livego_delete_url_template;
+        extern std::string livego_switch_base;
         extern std::string livego_pull_switch_tempalte;
         extern std::string livego_push_switch_template;
         extern std::string video_path_template;
@@ -50,6 +56,7 @@ namespace GLCC {
 
     typedef struct video_context {
         std::string video_path;
+        std::string video_name;
         bool use_template_path=false;
     } video_context_t;
 
@@ -86,6 +93,8 @@ namespace GLCC {
         // Detector
         Json::Value detector_init_context;
         detector_run_context_t  detector_run_context;
+        // Extra info
+        Json::Value extra_info;
     } glcc_server_context_t;
 
     template <class ProductType_t>

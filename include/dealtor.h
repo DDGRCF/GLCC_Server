@@ -7,11 +7,12 @@
 #include "detector.h"
 #include "common.h"
 
+
 namespace GLCC{
 
     class Detector {
         public:
-            int state = 0;
+            std::atomic_int32_t state{0};
             virtual int run(void * args) = 0;
             virtual ~Detector() {}
     };

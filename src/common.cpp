@@ -6,12 +6,16 @@ namespace GLCC {
         // u_int16_t livego_manger_url_prot = "";
         // u_int16_t livego_upload_url_port = "";
         // u_int16_t livego_delete_url_port = "";
+        const long num_microsecond_per_second = 1000000;
+        const long long max_detector_live_time = 5 * 60 * num_microsecond_per_second;
+        const long long interval_to_watch_detector = 10 * 60 * num_microsecond_per_second;
         std::string livego_control_url_base = "http://127.0.0.1:8090/control";
         std::string livego_manger_url_template = livego_control_url_base + "/get?room=%s";
         std::string livego_upload_url_template = "rtmp://127.0.0.1:1935/live/%s";
+        std::string livego_switch_base = "rtmp://127.0.0.1/live/%s";
         std::string livego_delete_url_template = livego_control_url_base + "/delete?room=%s";
-        std::string livego_pull_switch_tempalte = livego_control_url_base + "/pull?&oper=%s&app=live&name=%s&url=" + livego_upload_url_template;
-        std::string livego_push_switch_template = livego_control_url_base + "/push?&oper=%s&app=live&name=%s&url=" + livego_upload_url_template;
+        std::string livego_pull_switch_tempalte = livego_control_url_base + "/pull?&oper=%s&app=live&name=%s&url=" + livego_switch_base;
+        std::string livego_push_switch_template = livego_control_url_base + "/push?&oper=%s&app=live&name=%s&url=" + livego_switch_base;
         std::string video_path_template = "rtsp://127.0.0.1:8554/%s";
         std::string mysql_root_url = "mysql://root:9696@127.0.0.1:3306";
         std::string mysql_glccserver_url = mysql_root_url + "/glccserver";
@@ -29,9 +33,20 @@ namespace GLCC {
                 FOREIGN KEY (username) REFERENCES glccserver.User(username),
                 FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
 
-            DROP FUNCTION if EXISTS func_time_compare;
+            DROP PROCEDURE IF EXISTS glccserver.proc_time_compare;
+            CREATE PROCEDURE glccserver.proc_time_compare(
+                IN start_time TIMESTAMP,
+                IN end_time TIMESTAMP,
+                OUT result TINYINT
+            )BEGIN
+                DECLARE ctime INT;
+                set ctime = TIMESTAMPDIFF(SECOND, start_time, end_time);
+                set result = IF(ctime >= 0, 1, -1);
+            END;
+
+            DROP FUNCTION if EXISTS glccserver.func_time_compare;
             CREATE 
-                FUNCTION func_time_compare(start_time TIMESTAMP, end_time TIMESTAMP)
+                FUNCTION glccserver.func_time_compare(start_time TIMESTAMP, end_time TIMESTAMP)
                 RETURNS INT
             BEGIN
                 DECLARE ctime INT;
@@ -54,7 +69,7 @@ namespace GLCC {
             BEFORE INSERT ON glccserver.Room FOR EACH ROW
             BEGIN
                 DECLARE num INT DEFAULT 0;
-                DECLARE compare TINYINT DEFAULT 0;
+                DECLARE compare INT DEFAULT 0;
                 DECLARE msg VARCHAR(100);
                 SELECT COUNT(*) INTO num FROM glccserver.Video WHERE video_name=NEW.video_name AND username=NEW.username;
                 IF num <= 0 THEN 

@@ -331,7 +331,7 @@ namespace GLCC{
                 continue;
             }
 
-            if (this->state < 0) {
+            if (this->state < 1) {
                 break;
             };
 
