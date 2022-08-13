@@ -23,15 +23,17 @@ namespace GLCC {
         std::string ssl_crt_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt";
         std::string ssl_key_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure";
         std::string mysql_create_db_command = R"(
-            set global log_bin_trust_function_creators = 1;
+            SET global log_bin_trust_function_creators = 1;
             CREATE DATABASE IF NOT EXISTS glccserver;
             CREATE TABLE IF NOT EXISTS glccserver.User(username VARCHAR(20) NOT NULL UNIQUE, password VARCHAR(20) NOT NULL, nickname VARCHAR(20) NOT NULL, PRIMARY KEY (username));
             CREATE TABLE IF NOT EXISTS glccserver.Video(video_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_url VARCHAR(50) NOT NULL, PRIMARY KEY (video_name, username), 
                 FOREIGN KEY (username) REFERENCES glccserver.User(username));
             CREATE TABLE IF NOT EXISTS glccserver.Room(room_name VARCHAR(50) NOT NULL UNIQUE, username VARCHAR(20) NOT NULL, room_key VARCHAR(50) NOT NULL,
-                video_name VARCHAR(20) NOT NULL, num_connection INTEGER NOT NULL, start_time TIMESTAMP NOT NULL, end_time TIMESTAMP NOT NULL, PRIMARY KEY (room_name), 
+                video_name VARCHAR(20) NOT NULL, start_time TIMESTAMP NOT NULL, end_time TIMESTAMP NOT NULL, PRIMARY KEY (room_name), 
                 FOREIGN KEY (username) REFERENCES glccserver.User(username),
                 FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
+            CREATE TABLE IF NOT EXISTS glccserver.Contour(contour_name VARCHAR(20) NOT NULL UNIQUE, video_name VARCHAR(20) NOT NULL, contour_path JSON NOT NULL,
+                PRIMARY KEY (contour_name, video_name), FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
 
             DROP PROCEDURE IF EXISTS glccserver.proc_time_compare;
             CREATE PROCEDURE glccserver.proc_time_compare(
@@ -44,7 +46,7 @@ namespace GLCC {
                 set result = IF(ctime >= 0, 1, -1);
             END;
 
-            DROP FUNCTION if EXISTS glccserver.func_time_compare;
+            DROP FUNCTION IF EXISTS glccserver.func_time_compare;
             CREATE 
                 FUNCTION glccserver.func_time_compare(start_time TIMESTAMP, end_time TIMESTAMP)
                 RETURNS INT
@@ -56,12 +58,19 @@ namespace GLCC {
                 return res;
             END;
 
-            DROP TRIGGER if EXISTS glccserver.after_user_delete;
-            CREATE TRIGGER glccserver.after_user_delete
+            DROP TRIGGER IF EXISTS glccserver.before_user_delete;
+            CREATE TRIGGER glccserver.before_user_delete
             BEFORE DELETE ON glccserver.User FOR EACH ROW
             BEGIN
-                DELETE from glccserver.Video WHERE username=OLD.username;
-                DELETE from glccserver.Room WHERE username=OLD.username;
+                DELETE FROM glccserver.Video WHERE username=OLD.username;
+            END;
+
+            DROP TRIGGER IF EXISTS glccserver.before_video_delete;
+            CREATE TRIGGER glccserver.before_video_delete
+            BEFORE DELETE ON glccserver.Video FOR EACH ROW
+            BEGIN
+                DELETE FROM glccserver.Room WHERE video_name=OLD.video_name;
+                DELETE FROM glccserver.Contour WHERE video_name=OLD.video_name;
             END;
 
             DROP TRIGGER IF EXISTS glccserver.before_room_insert;
@@ -92,6 +101,19 @@ namespace GLCC {
                 SELECT COUNT(*) INTO num FROM glccserver.User WHERE username=NEW.username;
                 IF num <= 0 THEN
                     set msg=concat("Video: Find the ", NEW.username, " failed!");
+                	signal sqlstate '45000' set message_text=msg;
+                END IF;
+            END;
+
+            DROP TRIGGER IF EXISTS glccserver.before_contour_insert;
+            CREATE TRIGGER glccserver.before_contour_insert
+            BEFORE INSERT ON glccserver.Contour FOR EACH ROW
+            BEGIN
+                DECLARE num INT DEFAULT 0;
+                DECLARE msg VARCHAR(100);
+                SELECT COUNT(*) INTO num FROM glccserver.Video WHERE video_name=NEW.video_name;
+                IF num <= 0 THEN
+                    set msg=concat("Video: Find the ", NEW.video_name, " failed!");
                 	signal sqlstate '45000' set message_text=msg;
                 END IF;
             END;

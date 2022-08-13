@@ -31,7 +31,7 @@ namespace GLCC {
             static int parse_mysql_response(WFMySQLTask * task);
 
             static void run_detector(std::string & room_name, std::shared_ptr<glcc_server_context_t> context);
-            static Detector * register_detector(std::string & room_name, std::shared_ptr<glcc_server_context_t> context, int num_start_connection=1);
+            static Detector * register_detector(std::string & room_name, std::shared_ptr<glcc_server_context_t> context, int mode=Create_Register);
             static int cancel_detector(std::string & room_name, int mode=WAKE_CANCEL);
             static int parse_url(std::string & url, std::unordered_map<std::string, std::string> & results_map);
             static int parse_url(const char * url, std::unordered_map<std::string, std::string> & results_map);

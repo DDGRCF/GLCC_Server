@@ -285,7 +285,15 @@ namespace GLCC{
         return 0;
     }
 
-    int ObjectDetector::run(void * args) {
+    int ObjectDetector::put_lattice(cv::Mat & image) {
+        for (auto it = contour_list.begin(); it != contour_list.end(); it++) {
+            cv::Scalar color = {255, 255, 0};
+            cv::polylines(image, it->second, true, color, 3);
+        }
+        return 0;
+    }
+
+    int ObjectDetector::run(void * args, std::function<void()> cancel_func) {
         int ret, state;
         struct detector_run_context * context = (struct detector_run_context *) args; 
         const std::string video_path = context->video_path;
@@ -335,6 +343,13 @@ namespace GLCC{
                 break;
             };
 
+            if (is_put_lattice) {
+                ret = put_lattice(frame);
+                if (ret == -1) {
+                    LOG_F(ERROR, "Put lattice failed!");
+                }
+            }
+
             ret = dect(frame, 0.3);
             if (ret == -1) {
                 LOG_F(ERROR, "Dect image failed!");
@@ -354,6 +369,9 @@ namespace GLCC{
             }
         }
     final:
+        if (cancel_func != nullptr) {
+            cancel_func();
+        }
         capture.release();
         cv::destroyAllWindows();
         pclose(fp);

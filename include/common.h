@@ -23,12 +23,14 @@
 #include <fstream>
 #include <set>
 #include <atomic>
+#include <mutex>
 
 
 namespace GLCC {
     extern const float color_list[][3];
     enum Key {ESC=27};
     enum CancelMode {NORMAL_CANCEL=0, FORCE_CANCEL=1, WAKE_CANCEL=2};
+    enum RegisterMode {Create_Register=0, Judge_Register=1};
     namespace constants {
         extern const long num_microsecond_per_second;
         extern const long long max_detector_live_time;
@@ -144,7 +146,7 @@ namespace GLCC {
                 return m_ProductRegistry.erase(name);
             }
 
-            ProductType_t *GetProduct(std::string & name)
+            ProductType_t *GetProduct(const std::string & name)
             {
                 std::lock_guard<std::mutex> lock_guard(lock);
                 if (m_ProductRegistry.find(name) != m_ProductRegistry.end())
@@ -152,6 +154,12 @@ namespace GLCC {
                     return m_ProductRegistry[name];
                 }
                 return nullptr;
+            }
+
+            ProductType_t *GetProduct(const char * name)
+            {
+                std::string _name = name;
+                return GetProduct(_name);
             }
 
     private:
