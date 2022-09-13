@@ -18,12 +18,16 @@
 #include <functional>
 #include <unordered_map>
 #include <mutex>
+#include <chrono>
 #include <loguru.hpp>
 #include <jsoncpp/json/json.h>
 #include <fstream>
 #include <set>
 #include <atomic>
 #include <mutex>
+#include <numeric>
+#include <iomanip>
+#include <dirent.h>
 
 
 namespace GLCC {
@@ -32,24 +36,39 @@ namespace GLCC {
     enum CancelMode {NORMAL_CANCEL=0, FORCE_CANCEL=1, WAKE_CANCEL=2};
     enum RegisterMode {Create_Register=0, Judge_Register=1};
     namespace constants {
+        extern const long num_millisecond_per_second;
         extern const long num_microsecond_per_second;
         extern const long long max_detector_live_time;
         extern const long long interval_to_watch_detector;
-        extern std::string livego_control_url_base;
-        extern std::string livego_manger_url_template;
-        extern std::string livego_upload_url_template;
-        extern std::string livego_delete_url_template;
-        extern std::string livego_switch_base;
-        extern std::string livego_pull_switch_tempalte;
-        extern std::string livego_push_switch_template;
+        extern const long max_video_save_day;
+        extern std::string file_time_format;
+        extern std::string livego_check_stat_template;
+        extern std::string livego_push_url_template;
+        extern std::string livego_stop_reply_pull_url_template;
+        extern std::string livego_kick_sub_url;
+        extern std::string ffmpeg_push_command;
+        // extern std::string ffmpeg_save_cover_command;
         extern std::string video_path_template;
+
+        extern std::vector<std::string> video_suffixes;
+        extern std::vector<std::string> video_prefixes;
+
         extern std::string mysql_root_url;
         extern std::string mysql_glccserver_url;
-        extern std::string mysql_url_template;
         extern std::string mysql_create_db_command;
         extern std::string ssl_crt_path;
         extern std::string ssl_key_path;
     }
+
+    typedef struct ssl_context {
+        std::string ssl_crt_path;
+        std::string ssl_key_path;
+    } ssl_context_t;
+
+    typedef struct server_dir {
+        std::string work_dir;
+        std::string user_dir;
+    } server_dir_t;
 
     typedef struct url_context {
         std::string ip;
@@ -64,12 +83,7 @@ namespace GLCC {
 
     typedef struct livego_context {
         std::string room_name;
-        std::string room_key;
-        std::string livego_manger_url;
-        std::string livego_upload_url;
-        std::string livego_delete_url;
-        std::string livego_pull_switch_url;
-        std::string livego_push_switch_url;
+        std::string livego_push_url;
     } livego_context_t;
 
     typedef struct detector_init_context {
@@ -90,8 +104,9 @@ namespace GLCC {
         // Base
         url_context_t server_context;
         url_context_t client_context;
-        video_context_t  video_context;
-        livego_context_t  livego_context;
+        server_dir_t server_dir;
+        video_context_t video_context;
+        livego_context_t livego_context;
         // Detector
         Json::Value detector_init_context;
         detector_run_context_t  detector_run_context;
@@ -119,19 +134,19 @@ namespace GLCC {
                 return &Instance();
             }
 
-            void RegisterProduct(std::string & name, ProductType_t *registrar)
+            void RegisterProduct(const std::string & name, ProductType_t *registrar)
             {
                 std::lock_guard<std::mutex> lock_guard(lock);
                 m_ProductRegistry[name] = registrar;
             }
 
-            void RegisterProduct(std::string & name, std::function<ProductType_t* (void *)> init_func, void * init_args)
+            void RegisterProduct(const std::string & name, std::function<ProductType_t* (void *)> init_func, void * init_args)
             {
                 std::lock_guard<std::mutex> lock_guard(lock);
                 m_ProductRegistry[name] = init_func(init_args);
             }
 
-            int EraseProductDel(std::string name) {
+            int EraseProductDel(const std::string & name) {
                 std::lock_guard<std::mutex> lock_guard(lock);
                 if (m_ProductRegistry.find(name) != m_ProductRegistry.end()) {
                     ProductType_t * elem = m_ProductRegistry[name];
@@ -141,7 +156,7 @@ namespace GLCC {
                 }
                 return m_ProductRegistry.erase(name);
             }
-            int EraseProduct(std::string name) {
+            int EraseProduct(const std::string & name) {
                 std::lock_guard<std::mutex> lock_guard(lock);
                 return m_ProductRegistry.erase(name);
             }
@@ -172,17 +187,24 @@ namespace GLCC {
     template<class ProductType_t>
     std::mutex ProductFactory<ProductType_t>::lock;
 
-    int get_time_file(const char* file_stem, 
-                    const char * file_prefix, 
-                    const char* file_suffix, 
-                    char * file_path);
-    
-    int check_dir(const char * check_path, const bool if_exists_mkdir=false);
 
-    int check_file(std::string check_path, 
-                   std::vector<std::string> * file_set, 
-                   const std::vector<std::string> suffix={}, 
-                   const bool verbose=false);
+    std::string get_now_time(const std::string & time_format) noexcept ;
+
+    std::string join(std::vector<std::string> & strings, std::string delim, 
+        std::function<std::string(std::string &, std::string &)> = nullptr);
+    
+    int check_dir(const std::string & check_path, const bool is_mkdir=false) noexcept;
+
+    int parse_path(const std::string & path, std::unordered_map<std::string, std::string> & result_map) noexcept;
+
+    int read_file_list(const std::string & base_path, std::vector<std::string> files) noexcept;
+
+    int check_file(const std::string & check_path, 
+                   std::vector<std::string> * file_set = nullptr, 
+                   const std::vector<std::string> suffix={}) noexcept;
+    int get_cwd(std::string & file_path) noexcept;
+
+
 }
 
 #endif

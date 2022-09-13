@@ -19,15 +19,37 @@ namespace GLCC {
         ifs.open(config_path);
         int ret = reader.parse(ifs, root);
         if (!ret) {
-            LOG_F(ERROR, "Parse %s failed!", config_path.c_str());
+            server_state = -1;
+            LOG_F(ERROR, "[SERVER] Parse %s fail!", config_path.c_str());
             return;
         }
         glcc_server_context.server_context.ip = root["Server"]["server_ip"].asString();
         glcc_server_context.server_context.port = root["Server"]["server_port"].asInt64();
         glcc_server_context.detector_init_context = root["Detector"];
+        glcc_server_context.server_dir.work_dir = root["Server"]["work_dir"].asString();
+        glcc_server_ssl_context.ssl_crt_path = root["Server"]["ssl_crt_path"].asString();
+        glcc_server_ssl_context.ssl_key_path = root["Server"]["ssl_key_path"].asString();
+        ret = GLCC::check_dir(glcc_server_context.server_dir.work_dir.c_str(), true);
+        if (ret == -1) {
+            server_state = -1;
+            LOG_F(ERROR, "[SERVER] Dir %s don't exist", glcc_server_context.server_dir.work_dir.c_str());
+            return;
+        }
+        chdir(glcc_server_context.server_dir.work_dir.c_str());
+        std::string cwd;
+        ret = get_cwd(cwd);
+        if (ret == -1) {
+            server_state = -1;
+            LOG_F(ERROR, "[SERVER] Get current work dir: %s fail", cwd.c_str());
+        }
+        LOG_F(INFO, "[SERVER] Current dir: %s", cwd.c_str());
     }
 
     int GLCCServer::run() {
+        if (server_state == -1) {
+            LOG_F(ERROR, "GLCCServer init fail!");
+            return -1;
+        }
         signal(SIGINT, sig_handler);
         signal(SIGTERM, sig_handler);
         int state = WFT_STATE_TOREPLY;
@@ -46,21 +68,22 @@ namespace GLCC {
 
             // TODO: figure it out
             int ret = server.start(glcc_server_context.server_context.port, 
-                constants::ssl_crt_path.c_str(), 
-                constants::ssl_key_path.c_str());
+                glcc_server_ssl_context.ssl_crt_path.c_str(),
+                glcc_server_ssl_context.ssl_key_path.c_str());
+
             std::stringstream server_infos;
             get_server_infos(&server, server_infos);
-            LOG_F(INFO, "Server: %s", server_infos.str().c_str());
+            LOG_F(INFO, "[SERVER] %s", server_infos.str().c_str());
             if (ret == 0) {
                 server_wait_group.wait();
                 server.stop();
             } else {
-                LOG_F(ERROR, "Start server failed!");
+                LOG_F(ERROR, "[SERVER] Start server fail!");
                 return -1;
             }
             return 0;
         } else {
-            LOG_F(ERROR, "Init mysql databases failed!");
+            LOG_F(ERROR, "[SERVER] Init database fail!");
             return -1;
         }
     }
@@ -73,7 +96,7 @@ namespace GLCC {
             parse_mysql_response(task);
             *ex_state_ptr = WFT_STATE_SUCCESS;
         } else {
-            LOG_F(ERROR, "Init DB failed! Code: %d", error);
+            LOG_F(ERROR, "[SERVER] Init database fail! Code: %d", error);
             *ex_state_ptr = state;
         }
         mysql_wait_group.done();
@@ -82,10 +105,10 @@ namespace GLCC {
     void GLCCServer::main_callback(WFHttpTask * task, void * context) {
         std::stringstream connection_infos;
         get_connection_infos(task, connection_infos);
-        LOG_F(INFO, connection_infos.str().c_str());
+        LOG_F(INFO, "[SERVER] %s", connection_infos.str().c_str());
         REGEX_FUNC(hello_world_callback, "GET", "/hello_world", task);
         REGEX_FUNC(login_callback, "POST", "/login.*", task, context);
-        REGEX_FUNC(user_register_callback, "POST", "/register", task);
+        REGEX_FUNC(user_register_callback, "POST", "/register", task,  context);
     }
 
     void GLCCServer::hello_world_callback(WFHttpTask * task) {
@@ -96,11 +119,12 @@ namespace GLCC {
             auto seq = task->get_task_seq();
             set_common_resp(resp, "200", "OK");
             std::string msg = "Hello World!";
+            msg = "[SERVER] " + msg;
             LOG_F(INFO, msg.c_str());
             resp->append_output_body(msg);
             if (seq == 9) resp->add_header_pair("Connection", "close");
         } else {
-            LOG_F(ERROR, "Hello World task failed! Code: %d", error);
+            LOG_F(ERROR, "[SERVER] Hello World task fail! Code: %d", error);
         }
     }
 
@@ -129,13 +153,13 @@ namespace GLCC {
             Json::Reader reader;
             int ret = reader.parse(body_text, root);
             if (!ret) {
-                LOG_F(ERROR, "Parse %s failed!", body_text.c_str());
                 set_common_resp(resp, "400", "Bad Request");
+                LOG_F(ERROR, "[SERVER][LOGIN] Parse %s fail!", body_text.c_str());
                 return;
             }
             if (!root.isMember("user_name") || !root.isMember("user_password")) {
-                LOG_F(ERROR, "Find request body key: %s, %s failed!", "user_name", "user_password");
                 set_common_resp(resp, "400", "Bad Request");
+                LOG_F(ERROR, "[SERVER][LOGIN] Find request body key: %s, %s fail!", "user_name", "user_password");
                 return;
             }
             std::string user_name = root["user_name"].asString();
@@ -152,14 +176,15 @@ namespace GLCC {
                         std::unordered_map<std::string, std::vector<protocol::MySQLCell>> results;
                         parse_mysql_response(task, results);
                         const bool only_login = REGEX_VALUE("/login", http_task);
-                        LOG_F(INFO, "Only Login: %s", only_login ? "yes" : "no");
+                        auto & work_dir = ((glcc_server_context_t *)context)->server_dir.work_dir;
+                        LOG_F(INFO, "[SERVER][LOGIN][%s] Only Login: %s", user_name.c_str(), only_login ? "yes" : "no");
                         if (results.size() > 0) {
                             if (user_name == results["username"][0].as_string() \
                                 && user_password == results["password"][0].as_string()) {
                                 if (only_login) {
                                     WFMySQLTask * dump_info_task = WFTaskFactory::create_mysql_task(
                                         constants::mysql_glccserver_url, 0,
-                                        [user_name, user_password](WFMySQLTask * task) {
+                                        [user_name, user_password, work_dir](WFMySQLTask * task) {
                                             int state = task->get_state(); int error = task->get_error();
                                             Json::Value reply;
                                             reply["user_name"] = user_name;
@@ -194,18 +219,21 @@ namespace GLCC {
                                                     }
                                                     set_common_resp(up_resp, "200", "OK");
                                                     up_resp->append_output_body(reply.toStyledString());
-                                                    LOG_F(INFO, "Login Success!\nresponse: %s", reply.toStyledString().c_str());
+                                                    char user_dir[256];
+                                                    snprintf(user_dir, sizeof(user_dir), "%s/%s", work_dir.c_str(), user_name.c_str());
+                                                    check_dir(user_dir, true);
+                                                    LOG_F(INFO, "[SERVER][LOGIN][%s] Login success!\nresponse: %s", user_name.c_str(), reply.toStyledString().c_str());
                                                 } else {
                                                     set_common_resp(up_resp, "200", "OK");
-                                                    reply["msg"] = "Login Success!";
+                                                    reply["msg"] = "login success!";
                                                     up_resp->append_output_body(reply.toStyledString());
-                                                    LOG_F(INFO, "Login Success");
+                                                    LOG_F(INFO, "[SERVER][LOGIN][%s] Login success", user_name.c_str());
                                                 }
                                             } else {
                                                 set_common_resp(up_resp, "400", "Bad Request");
                                                 reply["msg"] = "Error in Server Sql connect";
                                                 up_resp->append_output_body(reply.toStyledString());
-                                                LOG_F(ERROR, "Connect Server Sql failed! Code: %d", error);
+                                                LOG_F(ERROR, "[SERVER][LOGIN][%s] Connect server sql fail! Code: %d", user_name.c_str(), error);
                                             }
                                         }
                                     );
@@ -215,7 +243,8 @@ namespace GLCC {
                                         "SELECT video_name, video_url FROM glccserver.Video WHERE username=\"%s\";"
                                         "SELECT glccserver.Contour.video_name as contour_video_name, glccserver.Contour.contour_name,"
                                         "glccserver.Contour.contour_path from glccserver.Contour, glccserver.Video "
-                                        "where glccserver.Contour.video_name=glccserver.Video.video_name and glccserver.Video.username=\"%s\";", 
+                                        "where glccserver.Contour.video_name=glccserver.Video.video_name and glccserver.Video.username=\"%s\" "
+                                        "and glccserver.Video.username=glccserver.Contour.username;", 
                                         user_name.c_str(), user_name.c_str());
                                     dump_info_task->get_req()->set_query(mysql_query);
                                     *series_of(task)<<dump_info_task;
@@ -226,17 +255,19 @@ namespace GLCC {
                                 set_common_resp(http_resp, "400", "Bad Request");
                                 root["msg"] = "Error user_name or user_password";
                                 http_resp->append_output_body(root.toStyledString());
+                                LOG_F(ERROR, "[SERVER][LOGIN][%s] Error user_name or user_password", user_name.c_str());
                             }
                         } else {
                             set_common_resp(http_resp, "400", "Bad Request");
                             root["msg"] = "Error user_name or user_password";
                             http_resp->append_output_body(root.toStyledString());
+                            LOG_F(ERROR, "[SERVER][LOGIN][%s] Error user_name or user_password", user_name.c_str());
                         }
                     } else {
                         set_common_resp(http_resp, "400", "Bad Request");
                         root["msg"] = "Error user_name or user_password";
                         http_resp->append_output_body(root.toStyledString());
-                        LOG_F(ERROR, "Connect to MySQL failed! Code: %d", error);
+                        LOG_F(ERROR, "[SERVER][LOGIN][%s] Connect to mysql fail! Code: %d", user_name.c_str(), error);
                     }
                 }
             );
@@ -248,28 +279,29 @@ namespace GLCC {
             mysql_task->get_req()->set_query(mysql_query);
             *series_of(task) << mysql_task;
         } else {
-            LOG_F(ERROR, "Login failed! Code: %d", error);
+            LOG_F(ERROR, "[SERVER][LOGIN] Login fail! Code: %d", error);
         }
     }
 
 
-    void GLCCServer::user_register_callback(WFHttpTask * task) {
+    void GLCCServer::user_register_callback(WFHttpTask * task, void * context) {
         int state = task->get_state(); int error = task->get_error();
         if (state == WFT_STATE_TOREPLY) {
             protocol::HttpRequest * req = task->get_req();
             protocol::HttpResponse * resp = task->get_resp();
+            auto & work_dir = ((glcc_server_context_t *) context)->server_dir.work_dir;
             const void * body; size_t body_len;
             req->get_parsed_body(&body, &body_len);
             const std::string body_text = (const char *)body;
             Json::Value root; Json::Reader reader;
             int ret = reader.parse(body_text, root);
             if (!ret) {
-                LOG_F(ERROR, "Parse %s failed!", body_text.c_str());
+                LOG_F(ERROR, "[SERVER][REGISTER] Parse %s fail!", body_text.c_str());
                 set_common_resp(resp, "400", "Bad Request");
                 return;
             }
             if (!root.isMember("user_name") || !root.isMember("user_password") || !root.isMember("user_nickname")) {
-                LOG_F(ERROR, "Find request body key: %s, %s failed!", "use_name", "video_password");
+                LOG_F(ERROR, "[SERVER][REGISTER] Find request body key: %s, %s fail!", "use_name", "video_password");
                 set_common_resp(resp, "400", "Bad Request");
                 return;
             }
@@ -280,7 +312,7 @@ namespace GLCC {
             // creat sql task
             WFMySQLTask * mysql_task = WFTaskFactory::create_mysql_task(
                 constants::mysql_glccserver_url, 0, 
-                [user_name, user_password, user_nickname](WFMySQLTask * task){
+                [user_name, user_password, user_nickname, work_dir](WFMySQLTask * task){
                     int state = task->get_state();
                     int error = task->get_error();
                     WFHttpTask * http_task = (WFHttpTask * )task->user_data;
@@ -288,14 +320,18 @@ namespace GLCC {
                     if (state == WFT_STATE_SUCCESS) {
                         int parse_state = parse_mysql_response(task);
                         if (parse_state != WFT_STATE_SUCCESS) {
-                            LOG_F(ERROR, "Register failed!");
                             set_common_resp(http_resp, "400", "Bad Request");
+                            LOG_F(ERROR, "[SERVER][REGISTER][%s] Register fail!", user_name.c_str());
                         } else {
+                            char user_dir[256];
+                            snprintf(user_dir, sizeof(user_dir), "%s/%s", work_dir.c_str(), user_name.c_str());
+                            check_dir(user_dir, true);
                             set_common_resp(http_resp, "200", "OK");
+                            LOG_F(INFO, "[SERVER][REGISTER][%s] Register success!", user_name.c_str());
                         }
                     } else {
-                        LOG_F(INFO, "Register failed! Code: %d", error);
                         set_common_resp(http_resp, "400", "Bad Request");
+                        LOG_F(INFO, "[SERVER][REGISTER][%s] Register fail! Code: %d", user_name.c_str(), error);
                     }
                 }
             );
@@ -307,9 +343,196 @@ namespace GLCC {
             mysql_task->get_req()->set_query(mysql_query);
             *series_of(task) << mysql_task;
         } else {
-            LOG_F(ERROR, "Register failed! Code: %d", error);
+            LOG_F(ERROR, "[SERVER][REGISTER] Register fail! Code: %d", error);
+        }
+    }
+
+
+    void GLCCServer::delete_video_file_callback(WFHttpTask * task, void * context) {
+        protocol::HttpRequest * req = task->get_req();
+        protocol::HttpResponse * resp = task->get_resp();
+        // glcc_server_context_t * glcc_context = (glcc_server_context_t *) context;
+        // auto & work_dir = glcc_context->server_dir.work_dir;
+        const void * body; size_t body_len;
+        req->get_parsed_body(&body, &body_len);
+        const std::string body_text = (const char *) body;
+        Json::Value root; Json::Reader reader;
+        int ret = reader.parse(body_text, root);
+        if (!ret) {
+            set_common_resp(resp, "400", "Bad Request");
+            LOG_F(ERROR, "[SERVER][DELETE_VIDEO_FILE] Parse %s fail!", body_text.c_str());
+            return;
+        }
+        
+        if (!root.isMember("video_file") && !root.isMember("video_name")) {
+            set_common_resp(resp, "400", "Bad Request");
+            LOG_F(ERROR, "[SERVER][DELETE_VIDEO_FILE] Find request body key: %s fail!", "video_file");
+            return;
         }
 
+        std::string user_name = root["user_name"].asString();
+        std::string video_name = root["video_name"].asString();
+
+        std::string video_file;
+        std::vector<std::string> delete_success_file;
+        if (root["video_file"].isArray()) {
+            for (auto i = 0; i < (int)root["video_file"].size(); i++) {
+                video_file = root["video_file"][i].asString();
+                ret = remove(video_file.c_str());
+                if (ret == 0) {
+                    delete_success_file.emplace_back(video_file);
+                }
+            }
+        } else {
+            video_file = root["video_file"].asString();
+            ret = remove(video_file.c_str());
+            if (ret == 0) {
+                delete_success_file.emplace_back(video_file);
+            }
+        }
+
+        WFMySQLTask * mysql_task;
+
+        mysql_task = WFTaskFactory::create_mysql_task(
+            constants::mysql_glccserver_url, 0, 
+            [user_name, video_name](WFMySQLTask * task){
+                int state = task->get_state(); int error = task->get_error();
+                if (state == WFT_STATE_SUCCESS) {
+                    LOG_F(INFO, "[SERVER][DELETE_VIDEO_FILE][%s][%s] Mysql Delete task success!", user_name.c_str(), video_name.c_str());
+                } else {
+                    LOG_F(INFO, "[SERVER][DELETE_VIDEO_FILE][%s][%s] Mysql Delete task failed! Code: %d", 
+                        user_name.c_str(), video_name.c_str(), error);
+                }
+            }
+        );
+
+
+        auto accumulate_func = [] (std::string & x, std::string & y) {
+            return x.empty() ? ("\"" + y + "\"") : (x + "," + "\"" + y + "\"");
+        };
+
+        auto file_str_concat = join(delete_success_file, "", accumulate_func); 
+        std::stringstream mysql_delete_query;
+        mysql_delete_query << "delete from glccserver.FILE where "
+                           << "username=" << "\"" << user_name << "\""  << " and "
+                           << "video_name=" << "\"" << video_name << "\""  << " and " 
+                           << "file_path in (" << file_str_concat << ");";
+
+        mysql_task->get_req()->set_query(mysql_delete_query.str());
+        *series_of(task) << mysql_task;
+        set_common_resp(resp, "200", "OK");
+    }
+
+
+    void GLCCServer::fetch_video_file_callback(WFHttpTask * task, void * context) {
+        static std::string cover_suffix = "jpg";
+        protocol::HttpRequest * req = task->get_req();
+        protocol::HttpResponse * resp = task->get_resp();
+        glcc_server_context_t * glcc_context = (glcc_server_context_t *) context;
+        auto & work_dir = glcc_context->server_dir.work_dir;
+        const void * body; size_t body_len;
+        req->get_parsed_body(&body, &body_len);
+        const std::string body_text = (const char *)body;
+        Json::Value root; Json::Reader reader;
+        int ret = reader.parse(body_text, root);
+        if (!ret) {
+            set_common_resp(resp, "400", "Bad Request");
+            LOG_F(ERROR, "[SERVER][FETCH_VIDEO_FILE] Parse %s fail!", body_text.c_str());
+            return;
+        }
+
+        if (!root.isMember("video_name")) {
+            set_common_resp(resp, "400", "Bad Request");
+            LOG_F(ERROR, "[SERVER][FETCH_VIDEO_FILE] Find request body key: %s fail!", "video_name");
+            return;
+        }
+
+        std::string user_name = root["user_name"].asString();
+        std::string user_dir = work_dir + "/" + user_name;
+
+        std::string video_name;
+        std::string video_dir;
+        if (root["video_name"].isArray()) {
+            Json::Value video_file_map;
+            for (auto i = 0; (int)root["video_name"].size(); i++) {
+                video_name = root["video_name"][i].asString();
+                video_dir = user_dir + "/" + video_name;
+                int ret = check_dir(video_dir, false);
+                if (ret == -1) {
+                    LOG_F(INFO, "[SERVER][FETCH_VIDEO_FILE][%s][%s] %s is not file or don't exist!", 
+                        user_name.c_str(), video_name.c_str(), video_dir.c_str());
+                    set_common_resp(resp, "400", "Bad Request");
+                    return;
+                } else {
+                    std::vector<std::string> file_list;
+                    ret = check_file(video_dir, &file_list, constants::video_suffixes);
+                    if (ret < 0) {
+                        LOG_F(INFO, "[SERVER][FETCH_VIDEO_FILE][%s][%s] Check %s fail!",
+                            user_name.c_str(), video_name.c_str(), video_dir.c_str());
+                        set_common_resp(resp, "400", "Bad Request");
+                        return;
+                    } else {
+                        for (auto & file : file_list) {
+                            std::unordered_map<std::string, std::string> results;
+                            ret = parse_path(file, results);
+                            if (ret == -1) {
+                                LOG_F(ERROR, "[SERVER][FETCH_VIDEO_FILE][%s][%s] Parse %s fail!", 
+                                    user_name.c_str(), video_name.c_str(), file.c_str());
+                                continue;
+                            }
+                            // auto & suffix = results["suffix"];
+                            auto & dirname = results["dirname"];
+                            auto & stem = results["stem"];
+                            std::string cover_path = dirname + "/" + stem + cover_suffix;
+                            video_file_map[video_name].append(file);
+                            if (check_file(cover_path) < 0) {
+                                LOG_F(WARNING, "[SERVER][FETCH_VIDEO_FILE][%s][%s] Find video cover fail!",
+                                    user_name.c_str(), video_name.c_str());
+                                ret = execlp(
+                                    "ffmpeg", 
+                                    "ffmpeg", "-y", "-i", file.c_str(), 
+                                    "-ss", "00:00:01", "-frames:v", 
+                                    "1", cover_path.c_str(), nullptr);
+                                if (ret == -1) {
+                                    LOG_F(ERROR, "[SERVER][FETCH_VIDEO_FILE][%s][%s] Execlp save cover fail!", 
+                                        user_name.c_str(), video_name.c_str());
+                                    set_common_resp(resp, "400", "Bad Request");
+                                    return;
+                                }
+                            } else {
+                                LOG_F(INFO, "[SERVER][FETCH_VIDEO_FILE][%s][%s] Find video cover success!", 
+                                    user_name.c_str(), video_name.c_str());
+                            }
+                        }
+                    set_common_resp(resp, "200", "OK");
+                    resp->append_output_body(video_file_map.toStyledString());
+                    }
+                }
+            }
+        } else {
+            Json::Value video_file_map;
+            std::string video_name = root["video_name"].asString();
+            video_dir = user_dir + "/" + video_name; std::vector<std::string> file_list;
+            int ret = read_file_list(video_dir, file_list);
+            if (ret == -1) {
+                LOG_F(INFO, "[SERVER][FETCH_VIDEO_FILE][%s][%s] Open %s fail!", 
+                    user_name.c_str(), video_name.c_str(), video_dir.c_str());
+                set_common_resp(resp, "400", "Bad Request");
+                return;
+            } else {
+                for (auto & file: file_list) {
+                    std::unordered_map<std::string, std::string> results;
+                    ret = parse_path(file, results);
+                    auto & suffix = results["suffix"];
+                    if (find(constants::video_suffixes.begin(), constants::video_suffixes.end(), suffix) \
+                            != constants::video_suffixes.end()) {
+                        video_file_map[video_name].append(file);
+                    }
+                }
+            }
+            set_common_resp(resp, "200", "OK");
+            resp->append_output_body(video_file_map.toStyledString());
+        }
     }
 
     void GLCCServer::dect_video_callback(WFHttpTask * task, void * context) {
@@ -326,91 +549,69 @@ namespace GLCC {
         Json::Value root;
         Json::Reader reader;
         reader.parse(body_text, root);
+        std::string user_name = root["user_name"].asString();
+        std::string user_password = root["user_password"].asString();
+
         if (!root.isMember("video_url") && !root.isMember("video_name")) {
-            LOG_F(ERROR, "Find request body key: %s, %s failed!", "video_url", "video_name");
+            LOG_F(ERROR, "[SERVER][DECT][%s] Find request body key: %s, %s fail!", 
+                user_name.c_str(), "video_url", "video_name");
             set_common_resp(resp, "400", "Bad Request");
             return;
         }
-        std::string user_name = root["user_name"].asString();
-        std::string user_password = root["user_password"].asString();
+
         std::string video_url = root["video_url"].asString();
         std::string video_name = root["video_name"].asString();
 
         char room_name[256] = {0};
         snprintf(room_name, sizeof(room_name), "%s_%s_%s", 
             user_name.c_str(), user_password.c_str(), video_name.c_str());
-        char livego_manger_url[256] = {0};
-        snprintf(livego_manger_url, sizeof(livego_manger_url), 
-            constants::livego_manger_url_template.c_str(), room_name);
+        char livego_push_url[256] = {0};
+        snprintf(livego_push_url, sizeof(livego_push_url), 
+            constants::livego_push_url_template.c_str(), room_name);
 
         // create detector run context
         std::shared_ptr<glcc_server_context_t> dect_context = \
             std::make_shared<glcc_server_context_t>();
-
+        
+        dect_context->server_dir = glcc_context->server_dir;
+        dect_context->server_dir.user_dir \
+            = glcc_context->server_dir.work_dir + "/" + user_name;
         dect_context->livego_context.room_name = room_name;
-        dect_context->livego_context.livego_manger_url = livego_manger_url;
+        dect_context->livego_context.livego_push_url = livego_push_url;
         dect_context->video_context.video_path = video_url;
         dect_context->video_context.video_name = video_name;
         dect_context->detector_init_context = glcc_context->detector_init_context;
         dect_context->detector_run_context = glcc_context->detector_run_context;
+        dect_context->detector_run_context.upload_path = livego_push_url;
+        dect_context->detector_run_context.video_path = video_url;
+
         dect_context->extra_info["user_name"] = user_name;
         dect_context->extra_info["user_password"] = user_password;
 
-        if (register_detector(dect_context->livego_context.room_name, dect_context, Judge_Register) == nullptr) {
-            // create graph task
-            SeriesWork * series = series_of(task); 
-            WFGraphTask * graph_task = WFTaskFactory::create_graph_task(
-                [](WFGraphTask * task){
-                    LOG_F(INFO, "Video Dect graph task complete!");
-                }
-            );
-
-            // check video_url 
-            char go_task_name[512];
-            snprintf(go_task_name, sizeof(go_task_name), "check: %s", video_url.c_str());
-            WFGoTask * go_task = WFTaskFactory::create_go_task(go_task_name, 
-                [](std::shared_ptr<glcc_server_context_t> context){
-                    std::string video_url = context->video_context.video_path;
-                    cv::VideoCapture capture;
-                    int ret = capture.open(video_url);
-                    if (ret) {
-                        context->state = WFT_STATE_SUCCESS;
-                    } else {
-                        context->state = WFT_STATE_TASK_ERROR;
-                    }
-                    capture.release();
-                }, dect_context);
-
-            go_task->set_callback([dect_context](WFGoTask * task){
-                int state = task->get_state(); int error = task->get_error();
-                if (state == WFT_STATE_SUCCESS) {
-                    LOG_F(INFO, "%s: %s", 
-                        dect_context->video_context.video_path.c_str(), 
-                        dect_context->state == WFT_STATE_SUCCESS ? "validate" : "invalidate");
-                } else {
-                    LOG_F(ERROR, "Check the %s failed! Code: %d", 
-                        dect_context->video_context.video_path.c_str(), error);
-                    dect_context->state = WFT_STATE_TASK_ERROR;
-                }
-            });
-
-            // create manager request
-            WFHttpTask * http_task = WFTaskFactory::create_http_task(livego_manger_url, 0, 0, 
-                [dect_context](WFHttpTask * http_task) {
-                    livego_manger_callback(http_task, dect_context);
-                }
-            );
-
-            protocol::HttpRequest * http_req = http_task->get_req();
-            set_common_req(http_req);
-            http_task->user_data = task;
-
-            // connect node1 -> node2
-            WFGraphNode & node1 = graph_task->create_graph_node(go_task);
-            WFGraphNode & node2 = graph_task->create_graph_node(http_task);
-            node1-->node2;
-            // series task
-            *series << graph_task;
+        if (register_detector(room_name,
+                dect_context, Judge_Register) == nullptr) {
+            cv::VideoCapture capture;
+            int ret = capture.open(video_url);
+            capture.release();
+            if (ret) {
+                WFGoTask * go_run_task = WFTaskFactory::create_go_task(
+                    "detector_run", run_detector, dect_context->livego_context.room_name, dect_context);
+                go_run_task->set_callback([dect_context, user_name, video_name](WFGoTask * task) {
+                    std::string & room_name = dect_context->livego_context.room_name;
+                    LOG_F(INFO, "[SERVER][DECT][%s][%s][%s] Detect task finish!", 
+                        user_name.c_str(), video_name.c_str(), room_name.c_str());
+                });
+                go_run_task->start();
+                set_common_resp(resp, "200", "OK");
+                Json::Value reply;
+                reply["room_name"] = room_name;
+                // TODO: append body nocopy
+                resp->append_output_body(reply.toStyledString());
+            } else {
+                set_common_resp(resp, "400", "Bad Request");
+                LOG_F(ERROR, "[SERVER][DECT][%s][%s][%s] URL: %s invalidate", 
+                    user_name.c_str(), video_name.c_str(), room_name, video_url.c_str());
+            }
         } else {
             set_common_resp(resp, "200", "OK");
             Json::Value reply;
@@ -419,58 +620,7 @@ namespace GLCC {
         }
     }
 
-    void GLCCServer::livego_manger_callback(WFHttpTask * task, std::shared_ptr<glcc_server_context_t> context) {
-        int state = task->get_state();
-        int error = task->get_error();
-        WFHttpTask * up_task = (WFHttpTask *)task->user_data;
-        protocol::HttpResponse * up_resp = (protocol::HttpResponse *)up_task->get_resp();
-        if (state == WFT_STATE_SUCCESS && context->state == WFT_STATE_SUCCESS) {
-            protocol::HttpResponse * resp = task->get_resp();
-
-            const void * body;
-            size_t body_len;
-
-            resp->get_parsed_body(&body, &body_len);
-            const std::string body_text = (const char *)body;
-
-            Json::Value root; Json::Reader reader;
-            state = reader.parse(body_text, root);
-            if (!state) {
-                LOG_F(ERROR, "Parse %s failed!", body_text.c_str());
-                set_common_resp(up_resp, "400", "Bad Request");
-            }
-            state = root["status"].asInt();
-            std::string room_key = root["data"].asString();
-            if (state == 200) {
-                char livego_upload_url[128] = {0};
-                snprintf(livego_upload_url, sizeof(livego_upload_url), 
-                    constants::livego_upload_url_template.c_str(), room_key.c_str());
-                context->detector_run_context.upload_path = livego_upload_url;
-                context->detector_run_context.video_path = context->video_context.video_path;
-                context->livego_context.room_key = room_key;
-                std::string room_name = context->livego_context.room_name;
-                LOG_F(INFO, "LiveGO UpLoad: %s", livego_upload_url);
-
-                WFGoTask * go_task = WFTaskFactory::create_go_task(room_name, run_detector, room_name, context);
-                go_task->set_callback([context](WFGoTask * task) {
-                    std::string & room_name = context->livego_context.room_name;
-                    LOG_F(INFO, "Detect: %s task finish!", room_name.c_str());
-                });
-                go_task->start();
-                set_common_resp(up_resp, "200", "OK");
-                Json::Value reply;
-                reply["room_name"] = context->livego_context.room_name;
-                up_resp->append_output_body(reply.toStyledString());
-            } else {
-                LOG_F(ERROR, "Create Manager Room failed!");
-                set_common_resp(up_resp, "400", "Bad Request");
-            }
-        } else {
-            LOG_F(ERROR, "Send to LiveGo-Server failed! Code: %d", error);
-            set_common_resp(up_resp, "400", "Bad Request");
-        }
-    }
-
+    // TODO: manager again
     void GLCCServer::disdect_video_callback(WFHttpTask * task, void * context) {
         protocol::HttpRequest * req = task->get_req();
         protocol::HttpResponse * resp = task->get_resp();
@@ -483,15 +633,15 @@ namespace GLCC {
         Json::Value root;
         Json::Reader reader;
         reader.parse(body_text, root);
+        std::string user_name = root["user_name"].asString();
         if (!root.isMember("room_url")) {
-            LOG_F(ERROR, "Find request body key: %s failed!", "room_url");
+            LOG_F(ERROR, "[SERVER][DISDECT][%s] Find request body key: %s fail!", user_name.c_str(), "room_url");
             set_common_resp(resp, "400", "Bad Request");
             return;
         }
 
         std::string room_url;
         std::string room_name;
-        std::string user_name = root["user_name"].asString();
         std::vector<std::string> failed_stop_room_url{};
         if (root["room_url"].isArray()) {
             for (auto i = 0; (int)root["room_url"].size(); i++) {
@@ -499,11 +649,13 @@ namespace GLCC {
                 room_url = root["room_url"][i].asString();
                 int ret = parse_room_url(room_url, results);
                 if (ret == -1) {
-                    LOG_F(ERROR, "Parse room_url: %s failed!", room_url.c_str());
+                    LOG_F(ERROR, "[SERVER][DISDECT][%s] Parse URL: %s fail!", 
+                        user_name.c_str(), room_url.c_str());
                     failed_stop_room_url.emplace_back(room_url);
                 } else {
                     room_name = results["room_name"];
                     cancel_detector(room_name, WAKE_CANCEL);
+                    LOG_F(INFO, "[SERVER][DISDECT][%s][%s] Cancel room success!", user_name.c_str(), room_name.c_str());
                 }
             }
         } else {
@@ -511,17 +663,19 @@ namespace GLCC {
             room_url = root["room_url"].asString();
             int ret = parse_room_url(room_url, results);
             if (ret == -1) {
-                LOG_F(ERROR, "Parse room_url: %s failed!", room_url.c_str());
                 failed_stop_room_url.emplace_back(room_url);
+                LOG_F(ERROR, "[SERVER][DISDECT][%s] Parse URL: %s fail!", 
+                    user_name.c_str(), room_url.c_str());
             } else {
                 room_name = results["room_name"];
                 cancel_detector(room_name, WAKE_CANCEL);
+                LOG_F(INFO, "[SERVER][DISDECT][%s][%s] Cancel room success!", user_name.c_str(), room_name.c_str());
             }
         }
 
         Json::Value reply;
         for (auto f : failed_stop_room_url) {
-            reply["failed_stop_room_url"].append(f);
+            reply["fail_stop_room_url"].append(f);
         }
         set_common_resp(resp, "200", "OK");
         resp->append_output_body(reply.toStyledString());
@@ -538,28 +692,50 @@ namespace GLCC {
         Json::Value root;
         Json::Reader reader;
         reader.parse(body_text, root);
+        std::string user_name = root["user_name"].asString();
         if (!root.isMember("use_template_url") || !root.isMember("video_url") || !root.isMember("video_name")) {
-            LOG_F(ERROR, "Find request body key: %s, %s, %s failed!", "use_template_url", "video_name", "video_url");
             set_common_resp(resp, "400", "Bad Request");
+            LOG_F(ERROR, "[SERVER][REGISTER_VIDEO][%s] Find request body key: %s, %s, %s fail!", 
+                user_name.c_str(), "use_template_url", "video_name", "video_url");
             return;
         }
 
         bool use_template_url = root["use_template_url"].asBool();
         std::string video_name = root["video_name"].asString();
         std::string video_url = root["video_url"].asString();
-        std::string user_name = root["user_name"].asString();
-        LOG_F(INFO, "Body: %s", root.toStyledString().c_str());
-        char video_path[128] = {0};
+        LOG_F(INFO, "[SERVER][REGISTER_VIDEO][%s][%s] Body: %s", 
+            user_name.c_str(), video_name.c_str(), root.toStyledString().c_str());
+
+        auto & work_dir = ((glcc_server_context_t *) context)->server_dir.work_dir;
+        
+        std::string user_dir = work_dir + "/" + user_name; 
+        std::string video_dir = user_dir + "/" + video_name;
+        std::string custom_dir = user_dir + "/" + "custom";
+
+        char video_path[512] = {0};
         if (use_template_url) {
             snprintf(video_path, sizeof(video_path), 
                 constants::video_path_template.c_str(), video_url.c_str());
         } else {
-            std::strcpy(video_path, video_url.c_str());
+            bool is_online_url = false;
+            for (auto & suffix : constants::video_prefixes) {
+                if (video_url.find(suffix, 0) == 0) {
+                    is_online_url = true;
+                    break;
+                }
+            }
+            if (is_online_url) {
+                std::strcpy(video_path, video_url.c_str());
+            } else {
+                snprintf(video_path, sizeof(video_path), "%s/%s", custom_dir.c_str(), video_url.c_str());
+            }
         }
+
+
         video_url = video_path;
         WFMySQLTask * mysql_task = WFTaskFactory::create_mysql_task(
             constants::mysql_glccserver_url, 0, 
-            [video_url, video_name, user_name](WFMySQLTask * task){
+            [video_url, video_name, user_name, video_dir](WFMySQLTask * task){
                 int state = task->get_state(); int error = task->get_error();
                 WFHttpTask * http_task = (WFHttpTask *) task->user_data;
                 protocol::HttpResponse * http_resp = http_task->get_resp();
@@ -571,14 +747,18 @@ namespace GLCC {
                         reply["video_url"] = video_url;
                         set_common_resp(http_resp, "200", "OK");
                         http_resp->append_output_body(reply.toStyledString());
-                        LOG_F(INFO, reply.toStyledString().c_str());
+                        check_dir(video_dir);
+                        LOG_F(INFO, "[SERVER][REGISTER_VIDEO][%s][%s] %s", 
+                            user_name.c_str(), video_name.c_str(), reply.toStyledString().c_str());
                     } else {
-                        LOG_F(ERROR, "Register Video failed!");
                         set_common_resp(http_resp, "400", "Bad Request");
+                        LOG_F(ERROR, "[SERVER][REGISTER_VIDEO][%s][%s] Register Video fail!", 
+                            user_name.c_str(), video_name.c_str());
                     }
                 } else {
-                    LOG_F(INFO, "Register failed! Code: %d", error);
                     set_common_resp(http_resp, "400", "Bad Request");
+                    LOG_F(INFO, "[SERVER][REGISTER_VIDEO][%s][%s] Register fail! Code: %d", 
+                        user_name.c_str(), video_name.c_str(), error);
                 }
             }
         );
@@ -603,14 +783,14 @@ namespace GLCC {
         Json::Value root;
         Json::Reader reader;
         reader.parse(body_text, root);
+        std::string user_name = root["user_name"].asString();
         if (!root.isMember("video_name")) {
-            LOG_F(ERROR, "Find request body key: %s failed!", "video_name");
             set_common_resp(resp, "400", "Bad Request");
+            LOG_F(ERROR, "[SERVER][DELETE_VIDEO][%s] Find request body key: %s fail!", user_name.c_str(), "video_name");
             return;
         }
 
         std::string video_name = root["video_name"].asString();
-        std::string user_name = root["user_name"].asString();
         LOG_F(INFO, "Body: %s", root.toStyledString().c_str());
         WFMySQLTask * mysql_task = WFTaskFactory::create_mysql_task(
             constants::mysql_glccserver_url, 0, 
@@ -622,21 +802,21 @@ namespace GLCC {
                     int parse_state = parse_mysql_response(task);
                     if (parse_state == WFT_STATE_SUCCESS) {
                         set_common_resp(http_resp, "200", "OK");
-                        LOG_F(INFO, "delete %s-%s success", user_name.c_str(), video_name.c_str());
+                        LOG_F(INFO, "[SERVER][DELETE_VIDEO][%s][%s] Delete video success!", user_name.c_str(), video_name.c_str());
                     } else {
                         set_common_resp(http_resp, "400", "Bad Request");
-                        LOG_F(INFO, "Delete Video failed!");
+                        LOG_F(INFO, "[SERVER][DELETE_VIDEO][%s][%s] Delete video fail!", user_name.c_str(), video_name.c_str());
                     }
                 } else {
-                    LOG_F(INFO, "Delete failed! Code: %d", error);
                     set_common_resp(http_resp, "400", "Bad Request");
+                    LOG_F(INFO, "[SERVER][DELETE_VIDEO][%s][%s] Delete fail! Code: %d", user_name.c_str(), video_name.c_str(), error);
                 }
             }
         );
         mysql_task->user_data = task;
         char mysql_query[512];
         snprintf(mysql_query, sizeof(mysql_query),
-            "DELETE FROM glccserver.Video where video_name=\"%s\" AND username=\"%s\"", video_name.c_str(), user_name.c_str());
+            "DELETE FROM glccserver.Video WHERE video_name=\"%s\" AND username=\"%s\"", video_name.c_str(), user_name.c_str());
         mysql_task->get_req()->set_query(mysql_query);
         *series_of(task) << mysql_task;
     }
@@ -653,12 +833,12 @@ namespace GLCC {
             Json::Value root; Json::Reader reader;
             int ret = reader.parse(body_text, root);
             if (!ret) {
-                LOG_F(ERROR, "Parse %s failed!", body_text.c_str());
+                LOG_F(ERROR, "Parse %s fail!", body_text.c_str());
                 set_common_resp(resp, "400", "Bad Request");
                 return;
             }
             if (!root.isMember("video_name") || !root.isMember("contour_name") || !root.isMember("contour_path")) {
-                LOG_F(ERROR, "Find request bdoy key: %s, %s, %s failed!", "video_name", "contour_name", "contour_path");
+                LOG_F(ERROR, "Find request bdoy key: %s, %s, %s fail!", "video_name", "contour_name", "contour_path");
                 set_common_resp(resp, "400", "Bad Request");
                 return;
             }
@@ -731,10 +911,10 @@ namespace GLCC {
                                                     }
                                                 }
                                             } else {
-                                                LOG_F(ERROR, "Find room failed!");
+                                                LOG_F(ERROR, "Find room fail!");
                                             }
                                         } else {
-                                            LOG_F(ERROR, "Find room failed! Code: %d", error);
+                                            LOG_F(ERROR, "Find room fail! Code: %d", error);
                                         }
                                     }
                                 );
@@ -748,20 +928,20 @@ namespace GLCC {
                                     video_name.c_str(), contour_name.c_str());
                             } else {
                                 set_common_resp(resp, "400", "Bad Request");
-                                LOG_F(ERROR, "Insert (%s-%s) into Contour failed!", 
+                                LOG_F(ERROR, "Insert (%s-%s) into Contour fail!", 
                                     video_name.c_str(), contour_name.c_str());
                             }
 
                         } else {
                             set_common_resp(resp, "400", "Bad Request");
-                            LOG_F(ERROR, "Insert (%s-%s) into Contour failed! Code: %d", 
+                            LOG_F(ERROR, "Insert (%s-%s) into Contour fail! Code: %d", 
                                 video_name.c_str(), contour_name.c_str(), error);
                         }
                     }
                 );
                 std::stringstream mysql_query;
-                mysql_query << "INSERT glccserver.Contour(contour_name, video_name, contour_path) VALUES ("
-                            <<  (*reply_ptr)["contour_name"] << "," << (*reply_ptr)["video_name"] << "," 
+                mysql_query << "INSERT glccserver.Contour(username, contour_name, video_name, contour_path) VALUES ("
+                            << (*reply_ptr)["user_name"] << "," << (*reply_ptr)["contour_name"] << "," << (*reply_ptr)["video_name"] << "," 
                             << "\"" <<(*reply_ptr)["contour_path"].toStyledString() << "\""
                             << ");";
                 mysql_task->get_req()->set_query(mysql_query.str());
@@ -769,7 +949,7 @@ namespace GLCC {
             });
             *series_of(task) << go_task;
         } else {
-            LOG_F(INFO, "Video put lattice failed! Code: %d", error);
+            LOG_F(INFO, "Video put lattice fail! Code: %d", error);
         }
     }
 
@@ -786,12 +966,12 @@ namespace GLCC {
             Json::Value root; Json::Reader reader;
             int ret = reader.parse(body_text, root);
             if (!ret) {
-                LOG_F(ERROR, "Parse %s failed!", body_text.c_str());
+                LOG_F(ERROR, "Parse %s fail!", body_text.c_str());
                 set_common_resp(resp, "400", "Bad Request");
                 return;
             }
             if (!root.isMember("video_name") || !root.isMember("contour_name")) {
-                LOG_F(ERROR, "Find request bdoy key: %s, %s failed!", "video_name", "contour_name");
+                LOG_F(ERROR, "Find request bdoy key: %s, %s fail!", "video_name", "contour_name");
                 set_common_resp(resp, "400", "Bad Request");
                 return;
             }
@@ -822,10 +1002,10 @@ namespace GLCC {
                                                 }
                                             }
                                         } else {
-                                            LOG_F(ERROR, "Find the room failed!");
+                                            LOG_F(ERROR, "Find the room fail!");
                                         }
                                     } else {
-                                        LOG_F(ERROR, "Find the room failed! Code: %d", error);
+                                        LOG_F(ERROR, "Find the room fail! Code: %d", error);
                                     }
                                 }
                             );
@@ -840,12 +1020,12 @@ namespace GLCC {
                                 video_name.c_str(), contour_name.c_str());
                         } else {
                             set_common_resp(resp, "400", "Bad Request");
-                            LOG_F(ERROR, "Delete (%s-%s) from Contour failed!",
+                            LOG_F(ERROR, "Delete (%s-%s) from Contour fail!",
                                 video_name.c_str(), contour_name.c_str());
                         }
                     } else {
                         set_common_resp(resp, "400", "Bad Request");
-                        LOG_F(ERROR, "Delete (%s-%s) from Contour failed! Code: %d",
+                        LOG_F(ERROR, "Delete (%s-%s) from Contour fail! Code: %d",
                             video_name.c_str(), contour_name.c_str(), error);
                     }
                 }
@@ -853,17 +1033,17 @@ namespace GLCC {
 
             char mysql_query[256];
             snprintf(mysql_query, sizeof(mysql_query), 
-                "DELETE FROM glccserver.Contour WHERE contour_name=\"%s\" AND video_name=\"%s\";",
-                contour_name.c_str(), video_name.c_str());
+                "DELETE FROM glccserver.Contour WHERE contour_name=\"%s\" AND video_name=\"%s\" AND username=%s;",
+                contour_name.c_str(), video_name.c_str(), root["user_name"].asCString());
             mysql_task->get_req()->set_query(mysql_query);
             *series_of(task) << mysql_task;
         } else {
-            LOG_F(INFO, "Video disput lattice failed! Code: %d", error);
+            LOG_F(INFO, "Video disput lattice fail! Code: %d", error);
         }
     }
 
 
-    int GLCCServer::parse_url(std::string & url, std::unordered_map<std::string, std::string> & result_map) {
+    int GLCCServer::parse_url(const std::string & url, std::unordered_map<std::string, std::string> & result_map) {
 	    static std::vector<std::string> fields{"url", "scheme", "slash", "host", "port", "path", "query", "hash"};
 	    static std::regex pattern{"^(?:([A-Za-z]+):)?(\\/{0,3})([0-9.\\-A-Za-z]+)(?::(\\d+))?(?:\\/([^?#]*))?(?:\\?([^#]*))?(?:#(.*))?$"};
         std::smatch results;
@@ -883,7 +1063,7 @@ namespace GLCC {
         return parse_url(_url, result_map);
     }
 
-    int GLCCServer::parse_room_url(std::string & url, std::unordered_map<std::string, std::string> & result_map) {
+    int GLCCServer::parse_room_url(const std::string & url, std::unordered_map<std::string, std::string> & result_map) {
 	    static std::vector<std::string> fields{"path", "room_name", "username", "password", "video_name"};
         std::regex pattern{".*live*/((.*)-(.*)-(.*)).flv"};
         std::smatch results;
@@ -1080,7 +1260,7 @@ namespace GLCC {
                         LOG_F(INFO, "Nothing to watch");
                     }
                 } else {
-                    LOG_F(ERROR, "Timmer watch all detectors failed! Code: %d", error);
+                    LOG_F(ERROR, "Timmer watch all detectors fail! Code: %d", error);
                 }
             }
         );
@@ -1090,21 +1270,102 @@ namespace GLCC {
         *series << WFTaskFactory::create_timer_task(constants::interval_to_watch_detector, detector_timer_callback);
     }
 
-    void GLCCServer::run_detector(std::string & room_name, std::shared_ptr<glcc_server_context_t> context) {
+    void GLCCServer::run_detector(const std::string & room_name, std::shared_ptr<glcc_server_context_t> context) {
         Json::Value detector_init_context = context->detector_init_context;
         struct detector_run_context detector_run_context = context->detector_run_context;
+        std::string video_name = context->video_context.video_name.c_str();
+        std::string user_name = context->extra_info["user_name"].asString();
+        auto & user_dir = context->server_dir.user_dir;
+        // char video_dir[256];
+        // snprintf(video_dir, sizeof(video_dir), "%s/%s", user_dir.c_str(), video_name.c_str());
+        std::string video_dir = user_dir + "/" + video_name;
         Detector * detector = register_detector(room_name, context, Create_Register);
         if (context->state == WFT_STATE_TASK_ERROR) {
-            LOG_F(ERROR, "Register Detector failed!");
+            LOG_F(ERROR, "Register Detector fail!");
         } else if (context->state == WFT_STATE_SUCCESS) {
             std::string mode = detector_init_context["mode"].asString();
             LOG_F(INFO, "Mode: %s", mode.c_str());
+            detector->resource_dir = video_dir;
             detector_run_context.vis_params = detector_init_context[(const char *)mode.c_str()]["vis_config"];
             detector->state = 1;
+            WFMySQLTask * mysql_task = WFTaskFactory::create_mysql_task(
+                constants::mysql_glccserver_url, 0,
+                [detector, room_name](WFMySQLTask * task) {
+                    int state = task->get_state(); int error = task->get_error();
+                    if (state == WFT_STATE_SUCCESS) {
+                        std::unordered_map<std::string, std::vector<protocol::MySQLCell>> results;
+                         parse_mysql_response(task, results);
+                        if (results.size() > 0) {
+                            if (results.find("contour_name") != results.end()) {
+                                std::vector<protocol::MySQLCell> & contour_name = results["contour_name"];
+                                std::vector<protocol::MySQLCell> & contour_path = results["contour_path"];
+                                Json::Reader reader; Json::Value value;
+                                for (int i = 0; i < (int)contour_name.size(); i++) {
+                                    value.clear();
+                                    std::string contour_name_str = contour_name[i].as_string();
+                                    std::string contour_path_str = contour_path[i].as_string();
+                                    reader.parse(contour_path_str, value);
+                                    std::vector<cv::Point2i> points_list;
+                                    for (int i = 0; i < (int)value.size() / 2; i++) {
+                                        points_list.emplace_back(
+                                            value[i * 2].asInt(), value[i * 2 + 1].asInt()
+                                        );
+                                    }
+                                    detector->contour_list[contour_name_str] = points_list;
+                                }
+                            } else {
+                                LOG_F(INFO, "Find the contour of %s fail!", room_name.c_str());
+                            }
+                        } else {
+                            LOG_F(INFO, "Find the contour of %s fail!", room_name.c_str());
+                        }
+                    } else {
+                        LOG_F(INFO, "Find the contour of %s fail! Code: %d", room_name.c_str(), error);
+                    }
+                }
+            );
+
+            char mysql_query[512];
+            snprintf(mysql_query, sizeof(mysql_query),
+                "SELECT contour_name, contour_path FROM glccserver.Contour "
+                "WHERE video_name=\"%s\" AND username=\"%s\";", video_name.c_str(), user_name.c_str());
+            mysql_task->get_req()->set_query(mysql_query);
+            mysql_task->start();
+
+            auto deal_func = [&video_name, &user_name] (void * args) {
+                std::string video_file_path = (*(std::stringstream *)args).str();
+                char mysql_query[512];
+                snprintf(mysql_query, sizeof(mysql_query),
+                    "insert into glccserver.File(file_path, video_name, user_name, start_time, end_time) values "
+                    "(\"%s\", \"%s\", \"%s\", now(), date_add(now(), interval %ld DAY));",
+                    video_file_path.c_str(), video_name.c_str(), user_name.c_str(), constants::max_video_save_day);
+                WFMySQLTask * mysql_task = WFTaskFactory::create_mysql_task(
+                    constants::mysql_glccserver_url, 0, 
+                    [video_file_path, video_name, user_name](WFMySQLTask * task) {
+                        int state = task->get_state(); int error = task->get_error();
+                        if (state == WFT_STATE_SUCCESS) {
+                            int parse_state = parse_mysql_response(task);
+                            if (parse_state == WFT_STATE_SUCCESS) {
+                                LOG_F(INFO, "Insert File(%s, %s, %s) success", 
+                                    video_file_path.c_str(), video_name.c_str(), user_name.c_str());
+                            } else {
+                                LOG_F(ERROR, "Insert File(%s, %s, %s) fail", 
+                                    video_file_path.c_str(), video_name.c_str(), user_name.c_str());
+                            }
+                        } else {
+                            LOG_F(ERROR, "Insert File(%s, %s, %s) fail! Code: %d", 
+                                video_file_path.c_str(), video_name.c_str(), user_name.c_str(), error);
+                        }
+                    }
+                );
+                mysql_task->get_req()->set_query(mysql_query);
+                mysql_task->start();
+            };
+
             int ret = detector->run(&detector_run_context, 
-                [&room_name](){
+                [&room_name](void * args){
                     cancel_detector(room_name, FORCE_CANCEL);
-                });
+                }, deal_func);
             if (ret == -1) {
                 LOG_F(INFO, "Detector: %s run stop!", room_name.c_str());
                 context->state = WFT_STATE_TASK_ERROR;
@@ -1114,15 +1375,15 @@ namespace GLCC {
         }
     }
 
-    Detector * GLCCServer::register_detector(std::string & room_name, std::shared_ptr<glcc_server_context_t> context, int mode) {
+    Detector * GLCCServer::register_detector(const std::string & room_name, std::shared_ptr<glcc_server_context_t> context, int mode) {
         Detector * detector;
         Json::Value extra_info = context->extra_info;
         std::string user_name = extra_info["user_name"].asString();
         std::string video_name = context->video_context.video_name;
-        std::string room_key = context->livego_context.room_key;
         Json::Value detector_init_context = context->detector_init_context;
         std::string detector_mode = detector_init_context["mode"].asString();
         Json::Value mode_context = detector_init_context[(const char *)detector_mode.c_str()];
+        mode_context["resource_dir"] = mode_context["resource_dir"].asString() + "-" + room_name;
         detector = ProductFactory<Detector>::Instance().GetProduct(room_name);
         if (mode == Create_Register) {
             if (detector == nullptr) {
@@ -1159,18 +1420,18 @@ namespace GLCC {
                         if (parse_state == WFT_STATE_SUCCESS) {
                             LOG_F(INFO, "Mysql create the room: %s success", room_name.c_str());
                         } else {
-                            LOG_F(INFO, "Mysql create the room: %s failed!", room_name.c_str());
+                            LOG_F(INFO, "Mysql create the room: %s fail!", room_name.c_str());
                         }
                     } else {
-                        LOG_F(ERROR, "Mysql create the room: %s failed! Code: %d", room_name.c_str(), error);
+                        LOG_F(ERROR, "Mysql create the room: %s fail! Code: %d", room_name.c_str(), error);
                     }
                 }
             );
             char mysql_query[512];
             snprintf(mysql_query, sizeof(mysql_query), 
-                R"(INSERT INTO glccserver.Room(room_name, username, room_key, video_name, start_time, end_time)
-                   VALUES("%s", "%s", "%s", "%s", now(), date_add(now(), interval %lld MICROSECOND));)", 
-                   room_name.c_str(), user_name.c_str(), room_key.c_str(), video_name.c_str(), constants::max_detector_live_time);
+                "INSERT INTO glccserver.Room(room_name, username, video_name, start_time, end_time)"
+                "VALUES(\"%s\", \"%s\", \"%s\", now(), date_add(now(), interval %lld MICROSECOND));", 
+                   room_name.c_str(), user_name.c_str(), video_name.c_str(), constants::max_detector_live_time);
             mysql_task->get_req()->set_query(mysql_query);
             mysql_task->start();
         } else if (context->state == WFT_STATE_TOREPLY) {
@@ -1184,33 +1445,34 @@ namespace GLCC {
                         if (parse_state == WFT_STATE_SUCCESS){
                             LOG_F(INFO, "Mysql update %s time success!", room_name.c_str());
                         } else {
-                            LOG_F(INFO, "Mysql update %s time failed!", room_name.c_str());
+                            LOG_F(INFO, "Mysql update %s time fail!", room_name.c_str());
                         }
                     } else {
-                        LOG_F(INFO, "Mysql update room: %s time failed! Code: %d", room_name.c_str(), error);
+                        LOG_F(INFO, "Mysql update room: %s time fail! Code: %d", room_name.c_str(), error);
                     }
                 }
             );
 
             char mysql_query[512];
             snprintf(mysql_query, sizeof(mysql_query), 
-                "UPDATE glccserver.Room SET start_time=now(), end_time=date_add(now(), interval %lld MICROSECOND) WHERE room_name=\"%s\";", 
-                constants::max_detector_live_time, room_name.c_str());
+                "UPDATE glccserver.Room SET start_time=now(), end_time=date_add(now(), INTERVAL %lld MICROSECOND) "
+                "WHERE room_name=\"%s\" AND username=\"%s\" AND video_name=\"%s\";", 
+                constants::max_detector_live_time, room_name.c_str(), user_name.c_str(), video_name.c_str());
             mysql_task->get_req()->set_query(mysql_query);
             mysql_task->start();
         }
         return detector;
     }
 
-    void GLCCServer::register_map(std::string & mode, std::string & room_name, void * context) {
+    void GLCCServer::register_map(const std::string & mode, const std::string & room_name, void * context) {
         if (mode == "ObjectDetector") {
             ProductFactory<Detector>::Instance().RegisterProduct(room_name, ObjectDetector::init_func, context);
-        } else if (mode == "TrakerDetector") {
-            // TODO:
+        } else if (mode == "TrackerDetector") {
+            ProductFactory<Detector>::Instance().RegisterProduct(room_name, TrackerDetector::init_func, context);
         }
     };
 
-    int GLCCServer::cancel_detector(std::string & room_name, int mode) {
+    int GLCCServer::cancel_detector(const std::string & room_name, int mode) {
         int state;
         Detector * detector = ProductFactory<Detector>::Instance().GetProduct(room_name);
         if (detector == nullptr) {
@@ -1220,23 +1482,15 @@ namespace GLCC {
             if (mode == FORCE_CANCEL || mode == WAKE_CANCEL) {
                 if (mode == FORCE_CANCEL) {
                     detector->state = -1;
-                    char livego_delete_url[256] = {0};
-                    snprintf(livego_delete_url, sizeof(livego_delete_url), 
-                        constants::livego_delete_url_template.c_str(), room_name.c_str());
-                    char livego_stop_pull_url[256] = {0};
-                    snprintf(livego_stop_pull_url, sizeof(livego_stop_pull_url), 
-                        constants::livego_pull_switch_tempalte.c_str(), "stop", room_name.c_str(), room_name.c_str());
-                    char livego_stop_push_url[256] = {0};
-                    snprintf(livego_stop_push_url, sizeof(livego_stop_push_url), 
-                        constants::livego_push_switch_template.c_str(), "stop", room_name.c_str(), room_name.c_str());
-                    LOG_F(INFO, "delete url: %s | stop pull url: %s | stop push url: %s", 
-                        livego_delete_url, livego_stop_pull_url, livego_stop_push_url);
 
+                    char livego_check_stat_url[256] = {0};
+                    snprintf(livego_check_stat_url, sizeof(livego_check_stat_url), 
+                        constants::livego_check_stat_template.c_str(), room_name.c_str());
                     WFGraphTask * graph_task = WFTaskFactory::create_graph_task(
                         [room_name](WFGraphTask * task) {
                             int ret = ProductFactory<Detector>::Instance().EraseProductDel(room_name);
                             if (ret != 1) {
-                                LOG_F(INFO, "Erase Product: %s failed! Code: %d", room_name.c_str(), ret);
+                                LOG_F(INFO, "Erase Product: %s fail! Code: %d", room_name.c_str(), ret);
                             } else {
                                 LOG_F(INFO, "Erase Prodcut: %s:%d", room_name.c_str(), ret);
                             }
@@ -1244,8 +1498,9 @@ namespace GLCC {
                         }
                     );
 
-                    WFHttpTask * stop_push_http_task = WFTaskFactory::create_http_task(
-                        livego_stop_push_url, 0, 0,
+                    // TODO:
+                    WFHttpTask * check_stat_http_task = WFTaskFactory::create_http_task(
+                        livego_check_stat_url, 0, 0,
                         [room_name](WFHttpTask * task) {
                             int state = task->get_state(); int error = task->get_error();
                             if (state == WFT_STATE_SUCCESS) {
@@ -1253,43 +1508,53 @@ namespace GLCC {
                                 const void * body;
                                 size_t body_len;
                                 resp->get_parsed_body(&body, &body_len);
-                                LOG_F(INFO, "Stop the push of room: %s: %s", room_name.c_str(), (const char *)body);
-                            } else {
-                                LOG_F(ERROR, "Stop the push of room: %s failed! Code: %d", room_name.c_str(), error);
-                            }
-                        }
-                    );
+                                Json::Value root; Json::Reader reader;
+                                reader.parse((const char *)body, root);
+                                Json::Value subs = root["data"]["subs"];
+                                LOG_F(INFO, subs.toStyledString().c_str());
+                                Json::Value kick_body;
+                                std::string session_id;
+                                WFHttpTask * kick_session_task;
+                                for (int i = 0; i < (int)subs.size(); i++) {
+                                    session_id = subs[i]["session_id"].asString();
+                                    kick_body["stream_name"] = room_name;
+                                    kick_body["session_id"] = session_id;
+                                    LOG_F(INFO, kick_body.toStyledString().c_str());
+                                    kick_session_task = WFTaskFactory::create_http_task(
+                                        constants::livego_kick_sub_url, 0, 0,
+                                        [room_name, session_id](WFHttpTask * task) {
+                                            int state = task->get_state() ;int error = task->get_state();
+                                            if (state == WFT_STATE_SUCCESS) {
+                                                protocol::HttpResponse * resp = task->get_resp();
+                                                const void * body;
+                                                size_t body_len;
+                                                resp->get_parsed_body(&body, &body_len);
+                                                Json::Value root; Json::Reader reader;
+                                                reader.parse((const char *)body, root);
+                                                LOG_F(INFO, "\n%s", root.toStyledString().c_str());
+                                            } else {
+                                                LOG_F(ERROR, "Kick stream_name: %s session_id: %s fail! Code: %d", 
+                                                    room_name.c_str(), session_id.c_str(), error);
+                                            }
 
-                    WFHttpTask * stop_pull_http_task = WFTaskFactory::create_http_task(
-                        livego_stop_pull_url, 0, 0,
-                        [room_name](WFHttpTask * task) {
-                            int state = task->get_state(); int error = task->get_error();
-                            if (state == WFT_STATE_SUCCESS) {
-                                protocol::HttpResponse * resp = task->get_resp();
-                                const void * body;
-                                size_t body_len;
-                                resp->get_parsed_body(&body, &body_len);
-                                LOG_F(INFO, "Stop the pull of room: %s: %s", room_name.c_str(), (const char *)body);
+                                        }
+                                    );
+                                    kick_session_task->get_req()->append_output_body(kick_body.toStyledString());
+                                    set_common_req(kick_session_task->get_req(), "*/*", "close", HttpMethodPost);
+                                    *series_of(task) << kick_session_task;
+                                }
+                                int error_code = root["error_code"].asInt();
+                                if (error_code != 0) {
+                                    LOG_F(ERROR, "Find room: %s fail! Code: %d", room_name.c_str(), error_code);
+                                }
+                                LOG_F(INFO, "Stop the pull of room: %s: %s", room_name.c_str(), root.toStyledString().c_str());
                             } else {
-                                LOG_F(ERROR, "Stop the pull of room: %s failed! Code: %d", room_name.c_str(), error);
+                                LOG_F(ERROR, "Stop the pull of room: %s fail! Code: %d", room_name.c_str(), error);
                             }
                         }
                     );
-
-                    WFHttpTask * delete_room_task = WFTaskFactory::create_http_task(
-                        livego_delete_url, 0, 0,
-                        [room_name](WFHttpTask * task) { int state = task->get_state(); int error = task->get_error();
-                            if (state == WFT_STATE_SUCCESS) {
-                                protocol::HttpResponse * resp = task->get_resp();
-                                const void * body;
-                                size_t body_len;
-                                resp->get_parsed_body(&body, &body_len);
-                                LOG_F(INFO, "Delete the room: %s: %s", room_name.c_str(), (const char *)body);
-                            } else {
-                                LOG_F(ERROR, "Delete the room: %s failed! Code: %d", room_name.c_str(), error);
-                            }
-                        }
-                    );
+                    // set_common_resp()
+                    set_common_req(check_stat_http_task->get_req());
 
                     WFMySQLTask * delete_sql_task = WFTaskFactory::create_mysql_task(
                         constants::mysql_glccserver_url, 0, 
@@ -1300,23 +1565,23 @@ namespace GLCC {
                                 if (parse_state == WFT_STATE_SUCCESS) {
                                     LOG_F(INFO, "Mysql delete room: %s success", room_name.c_str());
                                 } else {
-                                    LOG_F(INFO, "Mysql delete room: %s failed", room_name.c_str());
+                                    LOG_F(INFO, "Mysql delete room: %s fail", room_name.c_str());
                                 }
                             } else {
-                                LOG_F(INFO, "Mysql delete room: %s failed! Code: %d", room_name.c_str(), error);
+                                LOG_F(INFO, "Mysql delete room: %s fail! Code: %d", room_name.c_str(), error);
                             }
                         }
                     );
 
+
                     char mysql_query[128];
                     snprintf(mysql_query, sizeof(mysql_query), 
                         "delete from glccserver.Room where room_name=\"%s\"", room_name.c_str());
+    
                     delete_sql_task->get_req()->set_query(mysql_query);
-                    WFGraphNode & node1 = graph_task->create_graph_node(stop_push_http_task);
-                    WFGraphNode & node2 = graph_task->create_graph_node(stop_pull_http_task);
-                    WFGraphNode & node3 = graph_task->create_graph_node(delete_room_task);
-                    WFGraphNode & node4 = graph_task->create_graph_node(delete_sql_task);
-                    node1-->node2-->node3-->node4;
+                    WFGraphNode & node1 = graph_task->create_graph_node(check_stat_http_task);
+                    WFGraphNode & node2 = graph_task->create_graph_node(delete_sql_task);
+                    node1-->node2;
                     graph_task->start();
                 } else if (mode == WAKE_CANCEL && detector->state > 0) {
                     detector->state = -1;
@@ -1347,8 +1612,10 @@ namespace GLCC {
     }
     protocol::HttpRequest * GLCCServer::set_common_req(protocol::HttpRequest * req, 
                                       std::string accept, 
-                                      std::string status) {
+                                      std::string status,
+                                      std::string method) {
     
+        req->set_method(method);
         req->add_header_pair("Accept", accept);
         req->add_header_pair("User-Agent", "GLCC Server Implemented by WorkFlow");
         req->add_header_pair("Connection", status);

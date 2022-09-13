@@ -49,16 +49,16 @@
                             "img"
                         ],
                         "meta_keys": [
-                            "pad_shape",
                             "flip",
+                            "pad_shape",
                             "filename",
-                            "img_norm_cfg",
-                            "scale_factor",
-                            "flip_direction",
-                            "valid_ratio",
                             "ori_filename",
+                            "img_shape",
+                            "valid_ratio",
+                            "img_norm_cfg",
                             "ori_shape",
-                            "img_shape"
+                            "scale_factor",
+                            "flip_direction"
                         ]
                     }
                 ]

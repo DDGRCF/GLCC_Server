@@ -4,8 +4,8 @@
         "task": "ObjectDetection",
         "codebase": "mmdet",
         "version": "2.20.0",
-        "pth": "/home/r/Scripts/Python/mmdetection/work_dirs/yolox_tiny_8x8_300e_cat_finetune_v0/epoch_300.pth",
-        "config": "/home/r/Scripts/Python/mmdetection/work_dirs/yolox_tiny_8x8_300e_cat_finetune_v0/yolox_tiny_8x8_300e_cat_finetune.py"
+        "pth": "/home/r/Scripts/Python/mmdetection/work_dirs/yolox_tiny_8x8_300e_cat_finetune_v2/best_bbox_mAP_epoch_297.pth",
+        "config": "/home/r/Scripts/Python/mmdetection/work_dirs/yolox_tiny_8x8_300e_cat_finetune_v2/yolox_tiny_8x8_300e_cat_finetune_trainval.py"
     },
     "codebase_config": {
         "type": "mmdet",

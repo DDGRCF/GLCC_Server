@@ -3,37 +3,52 @@
 
 namespace GLCC {
     namespace constants {
-        // u_int16_t livego_manger_url_prot = "";
-        // u_int16_t livego_upload_url_port = "";
-        // u_int16_t livego_delete_url_port = "";
-        const long num_microsecond_per_second = 1000000;
+        const long num_millisecond_per_second = 1000;
+        const long num_microsecond_per_second = num_millisecond_per_second * 1000;
         const long long max_detector_live_time = 5 * 60 * num_microsecond_per_second;
         const long long interval_to_watch_detector = 10 * 60 * num_microsecond_per_second;
-        std::string livego_control_url_base = "http://127.0.0.1:8090/control";
-        std::string livego_manger_url_template = livego_control_url_base + "/get?room=%s";
-        std::string livego_upload_url_template = "rtmp://127.0.0.1:1935/live/%s";
-        std::string livego_switch_base = "rtmp://127.0.0.1/live/%s";
-        std::string livego_delete_url_template = livego_control_url_base + "/delete?room=%s";
-        std::string livego_pull_switch_tempalte = livego_control_url_base + "/pull?&oper=%s&app=live&name=%s&url=" + livego_switch_base;
-        std::string livego_push_switch_template = livego_control_url_base + "/push?&oper=%s&app=live&name=%s&url=" + livego_switch_base;
-        std::string video_path_template = "rtsp://127.0.0.1:8554/%s";
+        const long max_video_save_day = 2; // Day
+        std::string file_time_format = "%Y-%m-%d_%H:%M:%S";
+        std::string video_path_template = "rtsp://127.0.0.1:5544/live/%s";
+        std::string livego_push_url_template = "rtmp://127.0.0.1:1935/live/%s";
+        std::string livego_check_stat_template = "http://127.0.0.1:8083/api/stat/group?stream_name=%s";
+        std::string livego_stop_reply_pull_url_template = "http://127.0.0.1:8083/api/ctrl/stop_relay_pull?stream_name=%s";
+        std::string livego_kick_sub_url = "http://127.0.0.1:8083/api/ctrl/kick_session";
+        std::string ffmpeg_push_command = "ffmpeg -y -an -f rawvideo -vcodec rawvideo -pix_fmt bgr24 -s %dx%d -r %d -i - -c:v libx264 -pix_fmt yuv420p -preset ultrafast -f flv %s";
+        // std::string ffmpeg_save_cover_command = "ffmpeg -i %s -ss 00:00:01 -frames:v 1 %s";
+
         std::string mysql_root_url = "mysql://root:9696@127.0.0.1:3306";
         std::string mysql_glccserver_url = mysql_root_url + "/glccserver";
-        std::string mysql_url_template = mysql_root_url + "%s";
+
+        std::vector<std::string> video_suffixes = {"mp4", "flv", "wmv", "mpeg"};
+        std::vector<std::string> video_prefixes = {"http", "https", "rtmp", "rtsp"};
+
         std::string ssl_crt_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt";
         std::string ssl_key_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure";
         std::string mysql_create_db_command = R"(
             SET global log_bin_trust_function_creators = 1;
             CREATE DATABASE IF NOT EXISTS glccserver;
-            CREATE TABLE IF NOT EXISTS glccserver.User(username VARCHAR(20) NOT NULL UNIQUE, password VARCHAR(20) NOT NULL, nickname VARCHAR(20) NOT NULL, PRIMARY KEY (username));
-            CREATE TABLE IF NOT EXISTS glccserver.Video(video_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_url VARCHAR(50) NOT NULL, PRIMARY KEY (video_name, username), 
+            CREATE TABLE IF NOT EXISTS glccserver.User(username VARCHAR(20) NOT NULL UNIQUE, password VARCHAR(20) NOT NULL, nickname VARCHAR(20) NOT NULL, 
+                PRIMARY KEY (username));
+            CREATE TABLE IF NOT EXISTS glccserver.Video(video_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_url VARCHAR(50) NOT NULL, 
+                PRIMARY KEY (video_name, username), 
                 FOREIGN KEY (username) REFERENCES glccserver.User(username));
-            CREATE TABLE IF NOT EXISTS glccserver.Room(room_name VARCHAR(50) NOT NULL UNIQUE, username VARCHAR(20) NOT NULL, room_key VARCHAR(50) NOT NULL,
-                video_name VARCHAR(20) NOT NULL, start_time TIMESTAMP NOT NULL, end_time TIMESTAMP NOT NULL, PRIMARY KEY (room_name), 
+            CREATE TABLE IF NOT EXISTS glccserver.Room(room_name VARCHAR(50) NOT NULL, username VARCHAR(20) NOT NULL, 
+                video_name VARCHAR(20) NOT NULL, start_time TIMESTAMP NOT NULL, end_time TIMESTAMP NOT NULL, 
+                PRIMARY KEY (username, video_name, room_name), 
                 FOREIGN KEY (username) REFERENCES glccserver.User(username),
                 FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
-            CREATE TABLE IF NOT EXISTS glccserver.Contour(contour_name VARCHAR(20) NOT NULL UNIQUE, video_name VARCHAR(20) NOT NULL, contour_path JSON NOT NULL,
-                PRIMARY KEY (contour_name, video_name), FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
+
+            CREATE TABLE IF NOT EXISTS glccserver.Contour(contour_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_name VARCHAR(20) NOT NULL, contour_path JSON NOT NULL,
+                PRIMARY KEY (username, video_name, contour_name), 
+                FOREIGN KEY (username) REFERENCES glccserver.User(username),
+                FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
+
+            CREATE TABLE IF NOT EXISTS glccserver.File(file_path VARCHAR(50) NOT NULL, video_name VARCHAR(20) NOT NULL, 
+                username VARCHAR(20) NOT NULL, start_time TIMESTAMP NOT NULL, end_time TIMESTAMP NOT NULL, 
+                PRIMARY KEY(username, video_name, file_path), 
+                FOREIGN KEY (video_name) references glccserver.Video(video_name), 
+                FOREIGN KEY (username) REFERENCES glccserver.User(username));
 
             DROP PROCEDURE IF EXISTS glccserver.proc_time_compare;
             CREATE PROCEDURE glccserver.proc_time_compare(
@@ -58,20 +73,19 @@ namespace GLCC {
                 return res;
             END;
 
-            DROP TRIGGER IF EXISTS glccserver.before_user_delete;
-            CREATE TRIGGER glccserver.before_user_delete
-            BEFORE DELETE ON glccserver.User FOR EACH ROW
-            BEGIN
-                DELETE FROM glccserver.Video WHERE username=OLD.username;
+            DROP TRIGGER if exists glccserver.before_file_insert;
+            create trigger glccserver.before_file_insert
+            before insert on glccserver.File FOR EACH ROW
+            begin
+                DECLARE num INT DEFAULT 0; 
+                DECLARE msg VARCHAR(100);
+                SELECT COUNT(*) INTO num FROM glccserver.Video WHERE video_name=NEW.video_name AND username=NEW.username;
+                IF num <= 0 THEN
+                    set msg=concat("Video: Find the ", NEW.video_name, " failed!");
+                	signal sqlstate '45000' set message_text=msg;
+                END IF;
             END;
 
-            DROP TRIGGER IF EXISTS glccserver.before_video_delete;
-            CREATE TRIGGER glccserver.before_video_delete
-            BEFORE DELETE ON glccserver.Video FOR EACH ROW
-            BEGIN
-                DELETE FROM glccserver.Room WHERE video_name=OLD.video_name;
-                DELETE FROM glccserver.Contour WHERE video_name=OLD.video_name;
-            END;
 
             DROP TRIGGER IF EXISTS glccserver.before_room_insert;
             CREATE TRIGGER glccserver.before_room_insert
@@ -117,41 +131,116 @@ namespace GLCC {
                 	signal sqlstate '45000' set message_text=msg;
                 END IF;
             END;
+
+            DROP TRIGGER IF EXISTS glccserver.before_user_delete;
+            CREATE TRIGGER glccserver.before_user_delete
+            BEFORE DELETE ON glccserver.User FOR EACH ROW
+            BEGIN
+                DELETE FROM glccserver.Video WHERE username=OLD.username;
+            END;
+
+            DROP TRIGGER IF EXISTS glccserver.before_video_delete;
+            CREATE TRIGGER glccserver.before_video_delete
+            BEFORE DELETE ON glccserver.Video FOR EACH ROW
+            BEGIN
+                DELETE FROM glccserver.Room WHERE video_name=OLD.video_name and username=OLD.username;
+                DELETE FROM glccserver.Contour WHERE video_name=OLD.video_name and username=OLD.username;
+                DELETE from glccserver.File where video_name=OLD.video_name and username=OLD.username;
+            END;
+
         )";
     }
 
-    int get_time_file(const char* file_stem, 
-                    const char * file_prefix, 
-                    const char* file_suffix, 
-                    char * file_path){
-        time_t timep;    
-        struct tm *p;
-        char name[BUFSIZ] = {0};
-        time(&timep);
-        p = localtime(&timep);
-        return snprintf(file_path, sizeof(name), 
-            "%s%s-%d-%d-%d-%d-%02d%s", 
-            file_prefix?file_prefix:"",
-            file_stem?file_stem:"",
-            1900 + p->tm_year, 
-            1 + p->tm_mon, 
-            p->tm_mday, p->tm_hour, 
-            p->tm_min, 
-            file_suffix?file_suffix:"");
+
+    std::string get_now_time(const std::string & time_format) noexcept {
+        std::stringstream ss;
+        auto time_now = std::chrono::system_clock::now();
+        time_t now = std::chrono::system_clock::to_time_t(time_now);
+        ss << std::put_time(localtime(&now), time_format.c_str());
+        return ss.str();
     }
 
-    int check_dir(const char * check_path, const bool if_exists_mkdir) {
+
+    int get_cwd(std::string & file_path) noexcept {
+        char * buffer;
+        if ((buffer = getcwd(NULL, 0)) == NULL) {
+            return -1;
+        } else {
+            file_path = buffer;
+            free(buffer);
+            return 0;
+        }
+    }
+
+    int parse_path(const std::string & path, std::unordered_map<std::string, std::string> & result_map) noexcept {
+        static std::vector<std::string> fields{"path", "dirname", "basename", "stem", "suffix"};
+        static std::regex pattern{"^(.*)/((.*)\\.(.*))"};
+        struct stat st;
+        if (stat(path.c_str(), &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                result_map["path"] = path;
+                result_map["dirname"] = path;
+                return 0;
+            } else {
+                std::smatch results;
+                if (std::regex_match(path, results, pattern)) {
+                    for (int i = 0; i < (int)fields.size(); i++) {
+                        auto & key = fields[i];
+                        result_map[key] = results[i];
+                    }
+                    return 0;
+                } else {
+                    return -1;
+                }
+            }
+        } else {
+            return -1;
+        }
+    }
+
+    int read_file_list(const std::string & base_path, std::vector<std::string> files) noexcept {
+        DIR * dir;
+        struct dirent * ptr;
+
+        if ((dir = opendir(base_path.c_str())) == nullptr) {
+            return -1;
+        }
+
+        while ((ptr = readdir(dir)) != nullptr) {
+            if (strcmp(ptr->d_name, ".") == 0 || strcmp(ptr->d_name, "..") == 0) {
+                continue;
+            } else {
+                std::stringstream ss;
+                ss << base_path << "/" << ptr->d_name;
+                files.emplace_back(ss.str());
+            }
+        }
+        return 0;
+    }
+
+
+    std::string join(std::vector<std::string> &strings, std::string delim, 
+            std::function<std::string(std::string &, std::string &)> func) {
+        func = func==nullptr ? [&delim](std::string &x, std::string &y) {
+            return x.empty() ? y : x + delim + y;} : func;
+        return std::accumulate(
+            strings.begin(), strings.end(), std::string(), func
+        );
+    }
+
+
+    int check_dir(const std::string & check_path, const bool is_mkdir) noexcept {
         int ret;
         struct stat st;
-        if (stat(check_path, &st) == 0) {
+        if (stat(check_path.c_str(), &st) == 0) {
             if (S_ISDIR(st.st_mode)) {
                 return 0;
             } else {
                 return -1;
             }
         } else {
-            if (if_exists_mkdir) {
-                ret = mkdir(check_path, 00700);
+            if (is_mkdir) {
+                ret = mkdir(check_path.c_str(), 00700);
                 return ret;
             } else {
                 return -1;
@@ -159,30 +248,28 @@ namespace GLCC {
         }
     }
 
-    int check_file(std::string check_path, 
+
+    int check_file(const std::string & check_path, 
                    std::vector<std::string> * file_set, 
-                   const std::vector<std::string> suffix, 
-                   const bool verbose) {
+                   const std::vector<std::string> suffix) noexcept {
         struct stat st;
         char buf[BUFSIZ] = {0};
         if (stat(check_path.c_str(), &st) == 0) {
             if (S_ISDIR(st.st_mode)) {
-                if (verbose) {
-                    LOG_F(INFO, "Find dir: %s\n", check_path.c_str());
-                }
                 size_t total_file = 0;
                 if (suffix.size()) {
                     for (auto sfx: suffix) {
                         snprintf(buf, sizeof(buf), "%s%s%s", check_path.c_str(), "/*.", sfx.c_str());
                         glob_t gl;
-                        // TODO: confirm error num
-                        glob(buf, GLOB_ERR, nullptr, &gl);
+                        /*    `errno' value from the failing call; if it returns non-zero
+                            `glob' returns GLOB_ABEND; if it returns zero, the error is ignored. */
+                        int ret = glob(buf, GLOB_ERR, nullptr, &gl);
+                        if (ret != 0) {
+                            return -2;
+                        }
                         for (size_t i = 0; i < gl.gl_pathc; i++) {
                             total_file ++;
                             const char * subpath = gl.gl_pathv[i];
-                            if (verbose) {
-                                LOG_F(INFO, "Find subpath of dir: %s\n", subpath);
-                            }
                             if (file_set != nullptr) {
                                 file_set->emplace_back(subpath);
                             }
@@ -199,15 +286,12 @@ namespace GLCC {
                 if (file_set != nullptr) {
                     file_set->emplace_back(check_path);
                 }
-                if (verbose) {
-                    LOG_F(INFO, "Find file path: %s\n", check_path.c_str());
-                }
                 return 0;
             }
         } else {
             return -1;
         }
-        return -1;
+        return 0;
     }
 
     const float color_list[][3] = {
