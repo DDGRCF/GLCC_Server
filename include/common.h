@@ -29,6 +29,7 @@
 #include <numeric>
 #include <iomanip>
 #include <dirent.h>
+#include <cstdlib>
 
 
 namespace GLCC {
@@ -37,33 +38,31 @@ namespace GLCC {
     enum CancelMode {NORMAL_CANCEL=0, FORCE_CANCEL=1, WAKE_CANCEL=2};
     enum RegisterMode {Create_Register=0, Judge_Register=1};
     namespace constants {
+        extern const std::string localhost;
         extern const std::string mysql_create_db_command;
         extern const long num_millisecond_per_second;
         extern const long num_microsecond_per_second;
+        extern const long num_second_per_minute;
 
-        extern long long max_detector_live_time;
-        extern long long interval_to_watch_detector;
-        extern long long interval_to_watch_file;
+        extern long long interval_to_watch_detector_second;
+        extern long long interval_to_watch_file_second;
+        extern long max_detector_live_day;
+        extern long max_video_file_save_day;
 
-        extern long max_video_save_day;
         extern std::string file_time_format;
         extern std::string livego_check_stat_template;
         extern std::string livego_push_url_template;
-        extern std::string livego_stop_reply_pull_url_template;
         extern std::string livego_kick_url;
         extern std::string ffmpeg_push_command;
         extern std::string ffmpeg_file_push_command;
-        extern std::string cover_save_suffix;
         extern std::string video_path_template;
 
+        extern std::string cover_save_suffix;
         extern const std::vector<std::string> video_suffixes;
         extern const std::vector<std::string> video_prefixes;
 
         extern std::string mysql_root_url;
         extern std::string mysql_glccserver_url;
-        extern std::string ssl_crt_path;
-        extern std::string ssl_key_path;
-
     }
 
     typedef struct ssl_context {

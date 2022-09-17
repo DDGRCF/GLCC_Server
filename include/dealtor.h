@@ -22,7 +22,6 @@ namespace GLCC{
                 void * args, 
                 std::function<void(void *)> cancel_func = nullptr,
                 std::function<void(void *)> deal_func = nullptr) = 0;
-            virtual int put_lattice(cv::Mat & image) {return 0;}
             virtual ~Detector() {}
         protected:
     };
@@ -36,23 +35,12 @@ namespace GLCC{
                            const std::string & device_name,
                            const int device_id);
             ~ObjectDetector();
+            cv::Scalar get_color();
+            int dect(cv::Mat & img, std::vector<Object> & objects, float score_thre);
             int run(void * args, 
                 std::function<void(void *)> cancel_func = nullptr,
                 std::function<void(void *)> deal_func = nullptr) override;
-            int put_lattice(cv::Mat & image) override;
-            int dect(cv::Mat & imgs, 
-                     const float score_thre,
-                     const bool is_save=false, 
-                     const bool is_show=false,
-                     const bool is_text=false,
-                     const char * save_path="./dect.jpg",
-                     const int rect_thickness=2,
-                     const int text_thickness=2,
-                     const float text_scale=0.6,
-                     const int * rect_color=nullptr,
-                     const int * text_color=nullptr,
-                     const char ** class_name=nullptr,
-                     const bool verbose = false);
+
             static Detector * init_func(void * init_args);
         protected:
             mm_handle_t detector;

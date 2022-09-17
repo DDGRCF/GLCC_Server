@@ -64,11 +64,11 @@ namespace GLCC {
 
         if (state == WFT_STATE_SUCCESS) {
             WFTimerTask * file_timer_task = WFTaskFactory::create_timer_task(
-                constants::interval_to_watch_file, file_timer_callback
+                constants::interval_to_watch_file_second, file_timer_callback
             );
             file_timer_task->start();
             WFTimerTask * detector_timer_task = WFTaskFactory::create_timer_task(
-                constants::interval_to_watch_detector, detector_timer_callback
+                constants::interval_to_watch_detector_second, detector_timer_callback
             );
             detector_timer_task->start();
 
@@ -468,7 +468,7 @@ namespace GLCC {
 
         if (!root.isMember("room_name")) {
             set_common_resp(resp, "400", "Bad Request");
-            LOG_F(ERROR, "[SERVER][KICK_DECT_VIDEO_FILE][%s] Find request body key: %s", 
+            LOG_F(ERROR, "[SERVER][KICK_DECT_VIDEO_FILE][%s] Find request body key: %s fail!", 
                 user_name.c_str(), "room_name");
             return;
         }
@@ -1710,7 +1710,7 @@ namespace GLCC {
         char mysql_query[256] = "select username, video_name, file_path, glccserver.func_time_compare(now(), end_time) as compare_results from glccserver.File";
         mysql_task->get_req()->set_query(mysql_query);
         *series << mysql_task;
-        *series << WFTaskFactory::create_timer_task(constants::interval_to_watch_file, file_timer_callback);
+        *series << WFTaskFactory::create_timer_task(constants::interval_to_watch_file_second, file_timer_callback);
     }
 
     void GLCCServer::detector_timer_callback(WFTimerTask * timer) {
@@ -1761,7 +1761,7 @@ namespace GLCC {
         char mysql_query[256] = "select room_name, glccserver.func_time_compare(now(), end_time) as compare_results from glccserver.Room";
         mysql_task->get_req()->set_query(mysql_query);
         *series << mysql_task;
-        *series << WFTaskFactory::create_timer_task(constants::interval_to_watch_detector, detector_timer_callback);
+        *series << WFTaskFactory::create_timer_task(constants::interval_to_watch_detector_second, detector_timer_callback);
     }
 
     void GLCCServer::run_detector(const std::string & room_name, std::shared_ptr<glcc_server_context_t> context) {
@@ -1779,9 +1779,10 @@ namespace GLCC {
                 user_name.c_str(),video_name.c_str(), room_name.c_str());
         } else if (context->state == WFT_STATE_SUCCESS) {
             std::string mode = detector_init_context["mode"].asString();
-            LOG_F(INFO, "Mode: %s", mode.c_str());
+            LOG_F(INFO, "[SERVER][RUN_DETECTOR][%s][%s][%s] Mode: %s",
+                user_name.c_str(), video_name.c_str(), room_name.c_str(), mode.c_str());
             detector->resource_dir = video_dir;
-            detector_run_context.vis_params = detector_init_context[(const char *)mode.c_str()]["vis_config"];
+            detector_run_context.vis_params = detector_init_context[(const char *)mode.c_str()]["extra_config"];
             detector->state = 1;
             WFMySQLTask * mysql_task = WFTaskFactory::create_mysql_task(
                 constants::mysql_glccserver_url, 0,
@@ -1833,7 +1834,7 @@ namespace GLCC {
                 std::snprintf(mysql_query, sizeof(mysql_query),
                     "INSERT INTO glccserver.File(file_path, video_name, username, start_time, end_time) VALUES "
                     "(\"%s\", \"%s\", \"%s\", now(), date_add(now(), interval %ld DAY));",
-                    video_file_path.c_str(), video_name.c_str(), user_name.c_str(), constants::max_video_save_day);
+                    video_file_path.c_str(), video_name.c_str(), user_name.c_str(), constants::max_video_file_save_day);
                 WFMySQLTask * mysql_task = WFTaskFactory::create_mysql_task(
                     constants::mysql_glccserver_url, 0, 
                     [video_file_path, video_name, user_name](WFMySQLTask * task) {
@@ -1930,8 +1931,8 @@ namespace GLCC {
             char mysql_query[512];
             std::snprintf(mysql_query, sizeof(mysql_query), 
                 "INSERT INTO glccserver.Room(room_name, username, video_name, start_time, end_time)"
-                "VALUES(\"%s\", \"%s\", \"%s\", now(), date_add(now(), interval %lld MICROSECOND));", 
-                   room_name.c_str(), user_name.c_str(), video_name.c_str(), constants::max_detector_live_time);
+                "VALUES(\"%s\", \"%s\", \"%s\", now(), date_add(now(), interval %ld DAY));", 
+                   room_name.c_str(), user_name.c_str(), video_name.c_str(), constants::max_detector_live_day);
             mysql_task->get_req()->set_query(mysql_query);
             mysql_task->start();
         } else if (context->state == WFT_STATE_TOREPLY) {
@@ -1958,8 +1959,8 @@ namespace GLCC {
 
             char mysql_query[512];
             std::snprintf(mysql_query, sizeof(mysql_query), 
-                "UPDATE glccserver.Room SET start_time=now(), end_time=date_add(now(), INTERVAL %lld MICROSECOND) "
-                "WHERE room_name=\"%s\";", constants::max_detector_live_time, room_name.c_str());
+                "UPDATE glccserver.Room SET start_time=now(), end_time=date_add(now(), INTERVAL %ld MICROSECOND) "
+                "WHERE room_name=\"%s\";", constants::max_detector_live_day, room_name.c_str());
             mysql_task->get_req()->set_query(mysql_query);
             mysql_task->start();
         }
@@ -1992,11 +1993,11 @@ namespace GLCC {
                         [room_name](WFGraphTask * task) {
                             int ret = ProductFactory<Detector>::Instance().EraseProductDel(room_name);
                             if (ret != 1) {
-                                LOG_F(INFO, "Erase Product: %s fail! Code: %d", room_name.c_str(), ret);
+                                LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] Erase product fail! Code: %d", room_name.c_str(), ret);
                             } else {
-                                LOG_F(INFO, "Erase Prodcut: %s:%d", room_name.c_str(), ret);
+                                LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] Erase product %d", room_name.c_str(), ret);
                             }
-                            LOG_F(INFO, "Release Dect graph task complete!");
+                            LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] Release Dect graph task complete!", room_name.c_str());
                         }
                     );
 
@@ -2027,15 +2028,15 @@ namespace GLCC {
                                             int state = task->get_state() ;int error = task->get_state();
                                             if (state == WFT_STATE_SUCCESS) {
                                                 protocol::HttpResponse * resp = task->get_resp();
-                                                const void * body;
-                                                size_t body_len;
+                                                const void * body; size_t body_len;
                                                 resp->get_parsed_body(&body, &body_len);
                                                 Json::Value root; Json::Reader reader;
                                                 reader.parse((const char *)body, root);
-                                                LOG_F(INFO, "\n%s", root.toStyledString().c_str());
+                                                LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] Kick stream_name: %s session_id: %s success\n%s", 
+                                                    room_name.c_str(), room_name.c_str(), session_id.c_str(), root.toStyledString().c_str());
                                             } else {
-                                                LOG_F(ERROR, "Kick stream_name: %s session_id: %s fail! Code: %d", 
-                                                    room_name.c_str(), session_id.c_str(), error);
+                                                LOG_F(ERROR, "[SERVER][CANCEL_DETECTOR][%s] Kick stream_name: %s session_id: %s fail! Code: %d", 
+                                                    room_name.c_str(), room_name.c_str(), session_id.c_str(), error);
                                             }
 
                                         }
@@ -2046,11 +2047,11 @@ namespace GLCC {
                                 }
                                 int error_code = root["error_code"].asInt();
                                 if (error_code != 0) {
-                                    LOG_F(ERROR, "Find room: %s fail! Code: %d", room_name.c_str(), error_code);
+                                    LOG_F(ERROR, "[SERVER][CANCEL_DETECTOR][%s] Find room fail! Code: %d", room_name.c_str(), error_code);
                                 }
-                                LOG_F(INFO, "Stop the pull of room: %s: %s", room_name.c_str(), root.toStyledString().c_str());
+                                LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] Stop pull room\n%s", room_name.c_str(), root.toStyledString().c_str());
                             } else {
-                                LOG_F(ERROR, "Stop the pull of room: %s fail! Code: %d", room_name.c_str(), error);
+                                LOG_F(ERROR, "[SERVER][CANCEL_DETECTOR][%s] Stop pull room fail! Code: %d", room_name.c_str(), error);
                             }
                         }
                     );
@@ -2064,12 +2065,12 @@ namespace GLCC {
                             if (state == WFT_STATE_SUCCESS) {
                                 int parse_state = parse_mysql_response(task);
                                 if (parse_state == WFT_STATE_SUCCESS) {
-                                    LOG_F(INFO, "Mysql delete room: %s success", room_name.c_str());
+                                    LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] DB delete room success!", room_name.c_str());
                                 } else {
-                                    LOG_F(INFO, "Mysql delete room: %s fail", room_name.c_str());
+                                    LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] DB delete room fail!", room_name.c_str());
                                 }
                             } else {
-                                LOG_F(INFO, "Mysql delete room: %s fail! Code: %d", room_name.c_str(), error);
+                                LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] DB delete room fail! Code: %d", room_name.c_str(), error);
                             }
                         }
                     );
@@ -2086,15 +2087,15 @@ namespace GLCC {
                 } else if (mode == WAKE_CANCEL && detector->state > 0) {
                     detector->state = -1;
                 } else {
-                    LOG_F(ERROR, "Can't find cancel mode: %d", mode);
+                    LOG_F(ERROR, "[SERVER][CANCEL_DETECTOR][%s] Can't find cancel mode: %d", room_name.c_str(), mode);
                 }
             } else if (mode == NORMAL_CANCEL && detector->state == 0) {
                 detector->state = -1;
                 ProductFactory<Detector>::Instance().EraseProductDel(room_name);
-                LOG_F(INFO, "Delete the unrun detector: %s", room_name.c_str());
+                LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] Delete the unrun detector", room_name.c_str());
             } else if (mode == NORMAL_CANCEL && detector->state == -1) {
                 ProductFactory<Detector>::Instance().EraseProductDel(room_name);
-                LOG_F(INFO, "Delete the bad detector: %s", room_name.c_str());
+                LOG_F(INFO, "[SERVER][CANCEL_DETECTOR][%s] Delete the bad detector", room_name.c_str());
             }
         }
         return state;

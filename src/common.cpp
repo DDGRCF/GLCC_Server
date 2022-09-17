@@ -3,21 +3,23 @@
 
 namespace GLCC {
     namespace constants {
+        const std::string localhost="127.0.0.1";
         // time
         const long num_millisecond_per_second = 1000;
         const long num_microsecond_per_second = num_millisecond_per_second * 1000;
-        // 
-        long long max_detector_live_time = 5 * 60 * num_microsecond_per_second;
-        long long interval_to_watch_detector = 60 * 60 * num_microsecond_per_second;
-        long long interval_to_watch_file = 5 * 60 * num_microsecond_per_second;
-        long max_video_save_day = 2; 
+        const long num_second_per_minute = num_microsecond_per_second * 60;
+        // timer
+        long long interval_to_watch_detector_second = 60 * num_second_per_minute;
+        long long interval_to_watch_file_second = 5 * num_second_per_minute;
+        long max_detector_live_day = 365;
+        long max_video_file_save_day = 2; 
 
-        // livego 
+        // format
         std::string file_time_format = "%Y-%m-%d_%H:%M:%S";
+        // livego 
         std::string video_path_template = "rtsp://127.0.0.1:5544/live/%s";
         std::string livego_push_url_template = "rtmp://127.0.0.1:1935/live/%s";
         std::string livego_check_stat_template = "http://127.0.0.1:8083/api/stat/group?stream_name=%s";
-        std::string livego_stop_reply_pull_url_template = "http://127.0.0.1:8083/api/ctrl/stop_relay_pull?stream_name=%s";
         std::string livego_kick_url = "http://127.0.0.1:8083/api/ctrl/kick_session";
 
         std::string ffmpeg_file_push_command = "ffmpeg -stream_loop -1 -i %s -vcodec libx264 -f flv %s";
@@ -30,8 +32,6 @@ namespace GLCC {
         const std::vector<std::string> video_suffixes = {"mp4", "flv", "wmv", "mpeg", "avi"};
         const std::vector<std::string> video_prefixes = {"http", "https", "rtmp", "rtsp"};
 
-        std::string ssl_crt_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt";
-        std::string ssl_key_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure";
         const std::string mysql_create_db_command = R"(
             SET global log_bin_trust_function_creators = 1;
             CREATE DATABASE IF NOT EXISTS glccserver;
@@ -305,88 +305,4 @@ namespace GLCC {
         }
         return 0;
     }
-
-    const float color_list[][3] = {
-        {0.000, 0.447, 0.741},
-        {0.850, 0.325, 0.098},
-        {0.929, 0.694, 0.125},
-        {0.494, 0.184, 0.556},
-        {0.466, 0.674, 0.188},
-        {0.301, 0.745, 0.933},
-        {0.635, 0.078, 0.184},
-        {0.300, 0.300, 0.300},
-        {0.600, 0.600, 0.600},
-        {1.000, 0.000, 0.000},
-        {1.000, 0.500, 0.000},
-        {0.749, 0.749, 0.000},
-        {0.000, 1.000, 0.000},
-        {0.000, 0.000, 1.000},
-        {0.667, 0.000, 1.000},
-        {0.333, 0.333, 0.000},
-        {0.333, 0.667, 0.000},
-        {0.333, 1.000, 0.000},
-        {0.667, 0.333, 0.000},
-        {0.667, 0.667, 0.000},
-        {0.667, 1.000, 0.000},
-        {1.000, 0.333, 0.000},
-        {1.000, 0.667, 0.000},
-        {1.000, 1.000, 0.000},
-        {0.000, 0.333, 0.500},
-        {0.000, 0.667, 0.500},
-        {0.000, 1.000, 0.500},
-        {0.333, 0.000, 0.500},
-        {0.333, 0.333, 0.500},
-        {0.333, 0.667, 0.500},
-        {0.333, 1.000, 0.500},
-        {0.667, 0.000, 0.500},
-        {0.667, 0.333, 0.500},
-        {0.667, 0.667, 0.500},
-        {0.667, 1.000, 0.500},
-        {1.000, 0.000, 0.500},
-        {1.000, 0.333, 0.500},
-        {1.000, 0.667, 0.500},
-        {1.000, 1.000, 0.500},
-        {0.000, 0.333, 1.000},
-        {0.000, 0.667, 1.000},
-        {0.000, 1.000, 1.000},
-        {0.333, 0.000, 1.000},
-        {0.333, 0.333, 1.000},
-        {0.333, 0.667, 1.000},
-        {0.333, 1.000, 1.000},
-        {0.667, 0.000, 1.000},
-        {0.667, 0.333, 1.000},
-        {0.667, 0.667, 1.000},
-        {0.667, 1.000, 1.000},
-        {1.000, 0.000, 1.000},
-        {1.000, 0.333, 1.000},
-        {1.000, 0.667, 1.000},
-        {0.333, 0.000, 0.000},
-        {0.500, 0.000, 0.000},
-        {0.667, 0.000, 0.000},
-        {0.833, 0.000, 0.000},
-        {1.000, 0.000, 0.000},
-        {0.000, 0.167, 0.000},
-        {0.000, 0.333, 0.000},
-        {0.000, 0.500, 0.000},
-        {0.000, 0.667, 0.000},
-        {0.000, 0.833, 0.000},
-        {0.000, 1.000, 0.000},
-        {0.000, 0.000, 0.167},
-        {0.000, 0.000, 0.333},
-        {0.000, 0.000, 0.500},
-        {0.000, 0.000, 0.667},
-        {0.000, 0.000, 0.833},
-        {0.000, 0.000, 1.000},
-        {0.000, 0.000, 0.000},
-        {0.143, 0.143, 0.143},
-        {0.286, 0.286, 0.286},
-        {0.429, 0.429, 0.429},
-        {0.571, 0.571, 0.571},
-        {0.714, 0.714, 0.714},
-        {0.857, 0.857, 0.857},
-        {0.000, 0.447, 0.741},
-        {0.314, 0.717, 0.741},
-        {0.50,  0.5,   0}
-    };
-
 }

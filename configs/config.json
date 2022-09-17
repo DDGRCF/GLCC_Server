@@ -19,37 +19,45 @@
             "model": "/home/r/Scripts/C++/GLCC_Server/models/yolox_tiny_cat_dynamic_fp16_trt",
             "device": "cuda",
             "device_id": 0,
-            "class_name": ["cat"],
-            "vis_config": {
-                "show_score_thre": 0.3,
-                "rect_thickness": 2,
-                "put_bbox_text": true,
-                "text_thickness": 2,
-                "text_scale": 0.7
+            "extra_config": {
+                "score_thre": 0.3,
+                "into_contour_time_gap_second": 5,
+                "out_contour_time_gap_second": 20,
+                "imshow_result_image": true,
+                "class_names": ["cat"]
             }
         },
         "TrackerDetector": {
             "model": "/home/r/Scripts/C++/GLCC_Server/models/yolox_tiny_cat_dynamic_fp16_trt",
             "device": "cuda",
             "device_id": 0,
-            "class_name": ["cat"],
-            "vis_config": {
-                "show_score_thre": 0.3,
-                "rect_thickness": 2,
-                "put_bbox_text": true,
-                "text_thickness": 2,
-                "text_scale": 0.7
+            "extra_config": {
+                "score_thre": 0.3,
+                "tracker_buffer": 30,
+                "into_contour_time_gap_second": 5,
+                "out_contour_time_gap_second": 20,
+                "imshow_result_image": true,
+                "wh_ratio_thre_to_show": 1.6,
+                "wh_multiply_thre_to_show": 20,
+                "class_names": ["cat"]
             }
         }
     },
     "LiveGo": {
-        "manger_url_template": "http://127.0.0.1:8090/control/get?room=%s", 
-        "upload_url_template": "rtmp://127.0.0.1:1935/live/%s",
-        "delete_url_template": "http://127.0.0.1:8090/control/delete?room=%s"
+        "camera_push_port": 5544,
+        "dect_push_port": 1935,
+        "state_check_port": 8083
     },
-    "Video": {
-        "video_url_template": "rtsp://127.0.0.1:8554/%s"
+    "DB": {
+        "user_name": "root",
+        "user_password": "9696",
+        "db_server_ip": "127.0.0.1",
+        "db_server_port": 3306
     },
-    "Mysql": {
+    "Timer": {
+        "interval_to_watch_detector_second": 60,
+        "interval_to_watch_file_second":5,
+        "max_video_file_save_day": 2, 
+        "max_detector_live_day": 365
     }
 }
