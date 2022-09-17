@@ -1,11 +1,20 @@
-<img src="./asserts/logoWithText.png" width = "488" height = "159" alt="logo-catcat" align=center />
+<div>&nbsp;</div>
+<div align="center">
 
-<img style="margin-top:10px" src="./asserts/gitlink&&mmdeploy.png" width="" height = "50" alt="logo-mmdeply&&gitlink" align=center/>
+<div>
+<img src="./asserts/logoWithText.png" width = "488" height = "159" alt="logo-catcat" align=center />
+</div>
+<div>&nbsp;</div>
+<div>
+<img src="./asserts/gitlink&&mmdeploy.png" width="" height = "40" alt="logo-mmdeply&&gitlink" align=center/>
+</div>
+</div>
 
 # Cat Cat | MMDeply $\times$ GLCC 开源项目 | MMDeploy 实践
-<p align="left">
+
+<p align="center">
     <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/build-test-red' alt="Build Status"></a>  
-    <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/role-server-orange'></a>
+    <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/role-server-green'></a>
 </p>
 
 # 介绍
@@ -20,7 +29,7 @@
 
 目前，该项目包括两个部分:
 
-* **能够响应Http请求，完成检测跟踪的服务器**&emsp;⬅️️️ (目前位置)
+* <u>**能够响应Http请求，完成检测跟踪的服务器**&emsp;⬅️️️ (目前位置)</u>
 * [能够发起Http请求，完成实现播放的客服端](https://github.com/DDGRCF/GLCC_AndroidApplication)
 
 
@@ -49,6 +58,8 @@ make -j8
 
 # 感谢以下项目
 * [MMDeploy](https://github.com/open-mmlab/mmdeploy.git)
+* [MMDetection](https://github.com/open-mmlab/mmdetection)
+* [YOLOX](https://github.com/Megvii-BaseDetection/YOLOX)
 * [Workflow](https://github.com/sogou/workflow/blob/master)
 * [MegFlow](https://github.com/MegEngine/MegFlow)
 * [ByteTrack](https://github.com/ifzhang/ByteTrack)
