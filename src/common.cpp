@@ -3,34 +3,41 @@
 
 namespace GLCC {
     namespace constants {
+        // time
         const long num_millisecond_per_second = 1000;
         const long num_microsecond_per_second = num_millisecond_per_second * 1000;
-        const long long max_detector_live_time = 5 * 60 * num_microsecond_per_second;
-        const long long interval_to_watch_detector = 10 * 60 * num_microsecond_per_second;
-        const long max_video_save_day = 2; // Day
+        // 
+        long long max_detector_live_time = 5 * 60 * num_microsecond_per_second;
+        long long interval_to_watch_detector = 60 * 60 * num_microsecond_per_second;
+        long long interval_to_watch_file = 5 * 60 * num_microsecond_per_second;
+        long max_video_save_day = 2; 
+
+        // livego 
         std::string file_time_format = "%Y-%m-%d_%H:%M:%S";
         std::string video_path_template = "rtsp://127.0.0.1:5544/live/%s";
         std::string livego_push_url_template = "rtmp://127.0.0.1:1935/live/%s";
         std::string livego_check_stat_template = "http://127.0.0.1:8083/api/stat/group?stream_name=%s";
         std::string livego_stop_reply_pull_url_template = "http://127.0.0.1:8083/api/ctrl/stop_relay_pull?stream_name=%s";
-        std::string livego_kick_sub_url = "http://127.0.0.1:8083/api/ctrl/kick_session";
+        std::string livego_kick_url = "http://127.0.0.1:8083/api/ctrl/kick_session";
+
+        std::string ffmpeg_file_push_command = "ffmpeg -stream_loop -1 -i %s -vcodec libx264 -f flv %s";
         std::string ffmpeg_push_command = "ffmpeg -y -an -f rawvideo -vcodec rawvideo -pix_fmt bgr24 -s %dx%d -r %d -i - -c:v libx264 -pix_fmt yuv420p -preset ultrafast -f flv %s";
-        // std::string ffmpeg_save_cover_command = "ffmpeg -i %s -ss 00:00:01 -frames:v 1 %s";
+        std::string cover_save_suffix = "jpg";
 
         std::string mysql_root_url = "mysql://root:9696@127.0.0.1:3306";
         std::string mysql_glccserver_url = mysql_root_url + "/glccserver";
 
-        std::vector<std::string> video_suffixes = {"mp4", "flv", "wmv", "mpeg"};
-        std::vector<std::string> video_prefixes = {"http", "https", "rtmp", "rtsp"};
+        const std::vector<std::string> video_suffixes = {"mp4", "flv", "wmv", "mpeg", "avi"};
+        const std::vector<std::string> video_prefixes = {"http", "https", "rtmp", "rtsp"};
 
         std::string ssl_crt_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt";
         std::string ssl_key_path = "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure";
-        std::string mysql_create_db_command = R"(
+        const std::string mysql_create_db_command = R"(
             SET global log_bin_trust_function_creators = 1;
             CREATE DATABASE IF NOT EXISTS glccserver;
             CREATE TABLE IF NOT EXISTS glccserver.User(username VARCHAR(20) NOT NULL UNIQUE, password VARCHAR(20) NOT NULL, nickname VARCHAR(20) NOT NULL, 
                 PRIMARY KEY (username));
-            CREATE TABLE IF NOT EXISTS glccserver.Video(video_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_url VARCHAR(50) NOT NULL, 
+            CREATE TABLE IF NOT EXISTS glccserver.Video(video_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_url VARCHAR(256) NOT NULL, 
                 PRIMARY KEY (video_name, username), 
                 FOREIGN KEY (username) REFERENCES glccserver.User(username));
             CREATE TABLE IF NOT EXISTS glccserver.Room(room_name VARCHAR(50) NOT NULL, username VARCHAR(20) NOT NULL, 
@@ -39,14 +46,19 @@ namespace GLCC {
                 FOREIGN KEY (username) REFERENCES glccserver.User(username),
                 FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
 
-            CREATE TABLE IF NOT EXISTS glccserver.Contour(contour_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_name VARCHAR(20) NOT NULL, contour_path JSON NOT NULL,
-                PRIMARY KEY (username, video_name, contour_name), 
+            CREATE TABLE IF NOT EXISTS glccserver.Room(room_name VARCHAR(50) NOT NULL UNIQUE, username VARCHAR(20) NOT NULL, 
+                video_name VARCHAR(20) NOT NULL, start_time TIMESTAMP NOT NULL, end_time TIMESTAMP NOT NULL, 
+                PRIMARY KEY (room_name), 
                 FOREIGN KEY (username) REFERENCES glccserver.User(username),
                 FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
 
-            CREATE TABLE IF NOT EXISTS glccserver.File(file_path VARCHAR(50) NOT NULL, video_name VARCHAR(20) NOT NULL, 
+            CREATE TABLE IF NOT EXISTS glccserver.Contour(contour_name VARCHAR(20) NOT NULL, username VARCHAR(20) NOT NULL, video_name VARCHAR(20) NOT NULL, contour_path JSON NOT NULL,
+                PRIMARY KEY (username, video_name, contour_name), FOREIGN KEY (username) REFERENCES glccserver.User(username),
+                FOREIGN KEY (video_name) REFERENCES glccserver.Video(video_name));
+
+            CREATE TABLE IF NOT EXISTS glccserver.File(file_path VARCHAR(256) NOT NULL, video_name VARCHAR(20) NOT NULL, 
                 username VARCHAR(20) NOT NULL, start_time TIMESTAMP NOT NULL, end_time TIMESTAMP NOT NULL, 
-                PRIMARY KEY(username, video_name, file_path), 
+                PRIMARY KEY (username, video_name, file_path), 
                 FOREIGN KEY (video_name) references glccserver.Video(video_name), 
                 FOREIGN KEY (username) REFERENCES glccserver.User(username));
 
@@ -259,7 +271,7 @@ namespace GLCC {
                 size_t total_file = 0;
                 if (suffix.size()) {
                     for (auto sfx: suffix) {
-                        snprintf(buf, sizeof(buf), "%s%s%s", check_path.c_str(), "/*.", sfx.c_str());
+                        std::snprintf(buf, sizeof(buf), "%s%s%s", check_path.c_str(), "/*.", sfx.c_str());
                         glob_t gl;
                         /*    `errno' value from the failing call; if it returns non-zero
                             `glob' returns GLOB_ABEND; if it returns zero, the error is ignored. */

@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -36,28 +37,33 @@ namespace GLCC {
     enum CancelMode {NORMAL_CANCEL=0, FORCE_CANCEL=1, WAKE_CANCEL=2};
     enum RegisterMode {Create_Register=0, Judge_Register=1};
     namespace constants {
+        extern const std::string mysql_create_db_command;
         extern const long num_millisecond_per_second;
         extern const long num_microsecond_per_second;
-        extern const long long max_detector_live_time;
-        extern const long long interval_to_watch_detector;
-        extern const long max_video_save_day;
+
+        extern long long max_detector_live_time;
+        extern long long interval_to_watch_detector;
+        extern long long interval_to_watch_file;
+
+        extern long max_video_save_day;
         extern std::string file_time_format;
         extern std::string livego_check_stat_template;
         extern std::string livego_push_url_template;
         extern std::string livego_stop_reply_pull_url_template;
-        extern std::string livego_kick_sub_url;
+        extern std::string livego_kick_url;
         extern std::string ffmpeg_push_command;
-        // extern std::string ffmpeg_save_cover_command;
+        extern std::string ffmpeg_file_push_command;
+        extern std::string cover_save_suffix;
         extern std::string video_path_template;
 
-        extern std::vector<std::string> video_suffixes;
-        extern std::vector<std::string> video_prefixes;
+        extern const std::vector<std::string> video_suffixes;
+        extern const std::vector<std::string> video_prefixes;
 
         extern std::string mysql_root_url;
         extern std::string mysql_glccserver_url;
-        extern std::string mysql_create_db_command;
         extern std::string ssl_crt_path;
         extern std::string ssl_key_path;
+
     }
 
     typedef struct ssl_context {

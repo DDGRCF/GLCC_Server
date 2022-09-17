@@ -53,13 +53,18 @@ namespace GLCC {
             static void create_db_callbck(WFMySQLTask * task, void * context);
             // detector
             static void dect_video_callback(WFHttpTask * task, void * context);
+            static void dect_video_file_callback(WFHttpTask * task, void * context);
+            static void kick_dect_video_file_callback(WFHttpTask * task, void * context);
             static void disdect_video_callback(WFHttpTask * task, void * context);
             static void video_put_lattice_callback(WFHttpTask * task, void * context);
             static void video_disput_lattice_callback(WFHttpTask * task, void * context);
             static void fetch_video_file_callback(WFHttpTask * task, void * context);
-            static void delete_video_file_callback(WFHttpTask * taks, void * context);
-            static void detector_timer_callback(WFTimerTask * timer);
+            static void delete_video_file_callback(WFHttpTask * task, void * context);
+            static void transmiss_video_file_callback(WFHttpTask * task, void * context);
             static void register_map(const std::string & mode, const std::string & room_name, void * context);
+            // timer
+            static void detector_timer_callback(WFTimerTask * timer);
+            static void file_timer_callback(WFTimerTask * timer);
             // video
             static void register_video_callback(WFHttpTask * task, void * context);
             static void delete_video_callback(WFHttpTask * task, void * context);

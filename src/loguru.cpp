@@ -424,7 +424,7 @@ namespace loguru
 		int bytes_needed = _vscprintf(format, vlist);
 		CHECK_F(bytes_needed >= 0, "Bad string format: '%s'", format);
 		char* buff = (char*)malloc(bytes_needed+1);
-		vsnprintf(buff, bytes_needed+1, format, vlist);
+		vstd::snprintf(buff, bytes_needed+1, format, vlist);
 		return Text(buff);
 #else
 		char* buff = nullptr;
@@ -685,7 +685,7 @@ namespace loguru
 		time_t sec_since_epoch = time_t(ms_since_epoch / 1000);
 		tm time_info;
 		localtime_r(&sec_since_epoch, &time_info);
-		snprintf(buff, buff_size, "%04d%02d%02d_%02d%02d%02d.%03lld",
+		std::snprintf(buff, buff_size, "%04d%02d%02d_%02d%02d%02d.%03lld",
 			1900 + time_info.tm_year, 1 + time_info.tm_mon, time_info.tm_mday,
 			time_info.tm_hour, time_info.tm_min, time_info.tm_sec, ms_since_epoch % 1000);
 	}
@@ -727,9 +727,9 @@ namespace loguru
 	void suggest_log_path(const char* prefix, char* buff, unsigned long long buff_size)
 	{
 		if (prefix[0] == '~') {
-			snprintf(buff, buff_size - 1, "%s%s", home_dir(), prefix + 1);
+			std::snprintf(buff, buff_size - 1, "%s%s", home_dir(), prefix + 1);
 		} else {
-			snprintf(buff, buff_size - 1, "%s", prefix);
+			std::snprintf(buff, buff_size - 1, "%s", prefix);
 		}
 
 		// Check for terminating /
@@ -789,9 +789,9 @@ namespace loguru
 	{
 		char path[PATH_MAX];
 		if (path_in[0] == '~') {
-			snprintf(path, sizeof(path) - 1, "%s%s", home_dir(), path_in + 1);
+			std::snprintf(path, sizeof(path) - 1, "%s%s", home_dir(), path_in + 1);
 		} else {
-			snprintf(path, sizeof(path) - 1, "%s", path_in);
+			std::snprintf(path, sizeof(path) - 1, "%s", path_in);
 		}
 
 		if (!create_directories(path)) {
@@ -811,8 +811,8 @@ namespace loguru
 		}
 #if LOGURU_WITH_FILEABS
 		FileAbs* file_abs = new FileAbs(); // this is deleted in file_close;
-		snprintf(file_abs->path, sizeof(file_abs->path) - 1, "%s", path);
-		snprintf(file_abs->mode_str, sizeof(file_abs->mode_str) - 1, "%s", mode_str);
+		std::snprintf(file_abs->path, sizeof(file_abs->path) - 1, "%s", path);
+		std::snprintf(file_abs->mode_str, sizeof(file_abs->mode_str) - 1, "%s", mode_str);
 		stat(file_abs->path, &file_abs->st);
 		file_abs->fp = file;
 		file_abs->verbosity = verbosity;
@@ -1072,7 +1072,7 @@ namespace loguru
 		#if LOGURU_PTLS_NAMES
 			(void)pthread_once(&s_pthread_key_once, make_pthread_key_name);
 			if (const char* name = static_cast<const char*>(pthread_getspecific(s_pthread_key_name))) {
-				snprintf(buffer, static_cast<size_t>(length), "%s", name);
+				std::snprintf(buffer, static_cast<size_t>(length), "%s", name);
 			} else {
 				buffer[0] = 0;
 			}
@@ -1082,7 +1082,7 @@ namespace loguru
 			// only some platforms support it (currently).
 			pthread_getname_np(pthread_self(), buffer, length);
 		#elif LOGURU_WINTHREADS
-			snprintf(buffer, static_cast<size_t>(length), "%s", thread_name_buffer());
+			std::snprintf(buffer, static_cast<size_t>(length), "%s", thread_name_buffer());
 		#else
 			// Thread names unsupported
 			buffer[0] = 0;
@@ -1109,9 +1109,9 @@ namespace loguru
 			#endif
 
 			if (right_align_hex_id) {
-				snprintf(buffer, static_cast<size_t>(length), "%*X", static_cast<int>(length - 1), static_cast<unsigned>(thread_id));
+				std::snprintf(buffer, static_cast<size_t>(length), "%*X", static_cast<int>(length - 1), static_cast<unsigned>(thread_id));
 			} else {
-				snprintf(buffer, static_cast<size_t>(length), "%X", static_cast<unsigned>(thread_id));
+				std::snprintf(buffer, static_cast<size_t>(length), "%X", static_cast<unsigned>(thread_id));
 			}
 		}
 	}
@@ -1204,14 +1204,14 @@ namespace loguru
 				if (info.dli_sname[0] == '_') {
 					demangled = abi::__cxa_demangle(info.dli_sname, 0, 0, &status);
 				}
-				snprintf(buf, sizeof(buf), "%-3d %*p %s + %zd\n",
+				std::snprintf(buf, sizeof(buf), "%-3d %*p %s + %zd\n",
 						 i - skip, int(2 + sizeof(void*) * 2), callstack[i],
 						 status == 0 ? demangled :
 						 info.dli_sname == 0 ? symbols[i] : info.dli_sname,
 						 static_cast<char*>(callstack[i]) - static_cast<char*>(info.dli_saddr));
 				free(demangled);
 			} else {
-				snprintf(buf, sizeof(buf), "%-3d %*p %s\n",
+				std::snprintf(buf, sizeof(buf), "%-3d %*p %s\n",
 						 i - skip, int(2 + sizeof(void*) * 2), callstack[i], symbols[i]);
 			}
 			result += buf;
@@ -1257,43 +1257,43 @@ namespace loguru
 		out_buff[0] = '\0';
 		size_t pos = 0;
 		if (g_preamble_date && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "date       ");
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "date       ");
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_time && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "time         ");
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "time         ");
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_uptime && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "( uptime  ) ");
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "( uptime  ) ");
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_thread && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "[%-*s]", LOGURU_THREADNAME_WIDTH, " thread name/id");
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "[%-*s]", LOGURU_THREADNAME_WIDTH, " thread name/id");
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_file && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "%*s:line  ", LOGURU_FILENAME_WIDTH, "file");
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "%*s:line  ", LOGURU_FILENAME_WIDTH, "file");
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_verbose && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "   v");
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "   v");
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_pipe && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "| ");
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "| ");
 			if (bytes > 0) {
 				pos += bytes;
 			}
@@ -1323,36 +1323,36 @@ namespace loguru
 		char level_buff[6];
 		const char* custom_level_name = get_verbosity_name(verbosity);
 		if (custom_level_name) {
-			snprintf(level_buff, sizeof(level_buff) - 1, "%s", custom_level_name);
+			std::snprintf(level_buff, sizeof(level_buff) - 1, "%s", custom_level_name);
 		} else {
-			snprintf(level_buff, sizeof(level_buff) - 1, "% 4d", static_cast<int8_t>(verbosity));
+			std::snprintf(level_buff, sizeof(level_buff) - 1, "% 4d", static_cast<int8_t>(verbosity));
 		}
 
 		size_t pos = 0;
 
 		if (g_preamble_date && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "%04d-%02d-%02d ",
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "%04d-%02d-%02d ",
 				                 1900 + time_info.tm_year, 1 + time_info.tm_mon, time_info.tm_mday);
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_time && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "%02d:%02d:%02d.%03lld ",
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "%02d:%02d:%02d.%03lld ",
 			                     time_info.tm_hour, time_info.tm_min, time_info.tm_sec, ms_since_epoch % 1000);
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_uptime && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "(%8.3fs) ",
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "(%8.3fs) ",
 			                     uptime_sec);
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_thread && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "[%-*s]",
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "[%-*s]",
 			                     LOGURU_THREADNAME_WIDTH, thread_name);
 			if (bytes > 0) {
 				pos += bytes;
@@ -1360,22 +1360,22 @@ namespace loguru
 		}
 		if (g_preamble_file && pos < out_buff_size) {
 			char shortened_filename[LOGURU_FILENAME_WIDTH + 1];
-			snprintf(shortened_filename, LOGURU_FILENAME_WIDTH + 1, "%s", file);
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "%*s:%-5u ",
+			std::snprintf(shortened_filename, LOGURU_FILENAME_WIDTH + 1, "%s", file);
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "%*s:%-5u ",
 			                     LOGURU_FILENAME_WIDTH, shortened_filename, line);
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_verbose && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "%4s",
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "%4s",
 			                     level_buff);
 			if (bytes > 0) {
 				pos += bytes;
 			}
 		}
 		if (g_preamble_pipe && pos < out_buff_size) {
-			int bytes = snprintf(out_buff + pos, out_buff_size - pos, "| ");
+			int bytes = std::snprintf(out_buff + pos, out_buff_size - pos, "| ");
 			if (bytes > 0) {
 				pos += bytes;
 			}

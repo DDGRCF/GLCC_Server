@@ -34,8 +34,8 @@ data/
 
 # experiments
 my_exps/
-work_dirs/
+work_dir/
+log/
 
 # extra libs
-libevent*
 tags

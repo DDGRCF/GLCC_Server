@@ -90,9 +90,9 @@ namespace GLCC{
                 int baseline = text_thickness;
                 memset(text, 0, sizeof(text));
                 if (class_name != nullptr) {
-                    snprintf(text, sizeof(text), "%s|%.2f", class_name[label_id], score);
+                    std::snprintf(text, sizeof(text), "%s|%.2f", class_name[label_id], score);
                 } else {
-                    snprintf(text, sizeof(text), "%d|%.2f", label_id, score);
+                    std::snprintf(text, sizeof(text), "%d|%.2f", label_id, score);
                 }
                 cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, text_scale, text_thickness, &baseline);
                 cv::Scalar txt_color = text_color != nullptr ? cv::Scalar(text_color[0], text_color[1], text_color[2]) : cv::Scalar(255, 255, 255);
@@ -162,7 +162,7 @@ namespace GLCC{
         const int fps = capture.get(cv::CAP_PROP_FPS);
         // command
         char command[512] = {0};
-        snprintf(command, sizeof(command), \
+        std::snprintf(command, sizeof(command), \
             constants::ffmpeg_push_command.c_str(), \
                 width, height, fps, upload_path.c_str());
         FILE* fp = popen(command, "w");
@@ -313,7 +313,7 @@ namespace GLCC{
 
         // command NOTE: 
         char command[512] = {0};
-        snprintf(command, sizeof(command), \
+        std::snprintf(command, sizeof(command), \
             constants::ffmpeg_push_command.c_str(), \
                 width, height, fps, upload_path.c_str());
         FILE* fp = popen(command, "w");
@@ -331,8 +331,8 @@ namespace GLCC{
         }
 
         LOG_F(INFO, "\n[TrackerDetector][Runner] Read the video from %s: \n"
-            "----------- width: %d | height: %d | fps: %d.\n"
-            "----------- Push the video to %s",
+            "--------------------- width: %d | height: %d | fps: %d.\n"
+            "--------------------- Push the video to %s",
             video_path.c_str(), 
             width, height, fps, 
             upload_path.c_str());
@@ -340,12 +340,16 @@ namespace GLCC{
         // byteTracker
         BYTETracker tracker(fps, 30);
         int num_frames = 0;
-        int into_recoder_time_gap = 2 * constants::num_millisecond_per_second;
-        int out_recoder_time_gap = 2 * constants::num_millisecond_per_second;
+        int into_recoder_time_gap = 5 * constants::num_millisecond_per_second;
+        int out_recoder_time_gap = 20 * constants::num_millisecond_per_second;
         std::unordered_map<std::string, bool> is_in_contour = {};
         std::unordered_map<std::string, std::chrono::system_clock::time_point> into_contour_time_point = {};
         std::unordered_map<std::string, std::chrono::system_clock::time_point> out_contour_time_point = {};
-        FILE* fpt = nullptr;
+        // FILE* fpt = nullptr;
+
+        std::stringstream video_save_path;
+        cv::VideoWriter video_writer;
+        int video_type = (int)capture.get(CAP_PROP_FOURCC);
 
         for(;;) {
             ret = capture.read(frame);
@@ -374,58 +378,79 @@ namespace GLCC{
 
             for (auto & strack : stracks) {
                 auto & tlwh = strack.tlwh;
+                auto xyah = strack.to_xyah();
                 bool wh_ratio = tlwh[2] / tlwh[3] > 1.6;
                 if (tlwh[2] * tlwh[3] > 20 && !wh_ratio) {
                     Scalar color = tracker.get_color(strack.track_id);
-                    putText(frame, format("%d", strack.track_id), Point(tlwh[0], tlwh[1] - 5),
-                        0, 0.6, Scalar(0, 0, 255), 2, LINE_AA);
-                    rectangle(frame, Rect(tlwh[0], tlwh[1], tlwh[2], tlwh[3]), color, 2);
+                    cv::putText(frame, cv::format("cat: %d", strack.track_id), cv::Point(tlwh[0], tlwh[1] - 5),
+                        0, 0.6, cv::Scalar(0, 0, 255), 2, LINE_AA);
+                    cv::rectangle(frame, cv::Rect(tlwh[0], tlwh[1], tlwh[2], tlwh[3]), color, 2);
+                    cv::circle(frame, cv::Point(xyah[0], xyah[1]), 10, color, -1);
                 }
             }
 
             if (is_put_lattice) {
-                for (auto & contour: contour_list) {
+                auto time_now = std::chrono::system_clock::now();
+                for (auto & item: contour_list) {
+                    auto & name = item.first;
+                    auto & contour = item.second;
+                    int ret = 0;
                     for (auto & strack : stracks) {
                         auto xyah = strack.to_xyah();
-                        LOG_F(INFO, "ctr_x: %f, ctr_y: %f", xyah[0], xyah[1]);
-                        if (cv::pointPolygonTest(contour.second, 
-                            (cv::Point2f)(xyah[0], xyah[1]), false) == 1) {
-                            into_contour_time_point[contour.first] = std::chrono::system_clock::now();
+                        cv::Point center_point(xyah[0], xyah[1]);
+                        ret = cv::pointPolygonTest(contour, center_point, false);
+                        if (ret >= 0) {
                             break;
                         }
-                        out_contour_time_point[contour.first] = std::chrono::system_clock::now();
+                    }
+
+                    if (ret >= 0) {
+                        if (is_in_contour.size() == 0) {
+                            if (into_contour_time_point.find(name) == into_contour_time_point.end()) {
+                                into_contour_time_point[name] = time_now;
+                            }
+                        }
+                        out_contour_time_point.erase(name);
+                    } else {
+                        if (out_contour_time_point.find(name) == out_contour_time_point.end()) {
+                            out_contour_time_point[name] = time_now;
+                        }
                     }
                 }
 
-                auto time_now = std::chrono::system_clock::now();
+                std::vector<std::string> into_erase_key = {};
                 for (auto & item : into_contour_time_point) {
                     auto & name = item.first;
                     auto & time_point = item.second;
-                    auto time_gap = std::chrono::duration_cast<std::chrono::milliseconds>(time_now - time_point);
-                    LOG_F(INFO, "[TrackerDetector][Runner] In contour time: %ld", time_gap.count());
-                    if (time_gap.count() > into_recoder_time_gap) {
-                        if (fpt == nullptr) {
-                            std::stringstream ss;
-                            if (resource_dir != "") {
-                                time_t now = std::chrono::system_clock::to_time_t(time_now);
-                                ss << resource_dir << "/";
-                                ss << std::put_time(localtime(&now), constants::file_time_format.c_str());
-                                ss << ".flv";
-                                char save_command[512] = {0};
-                                snprintf(save_command, sizeof(save_command), 
-                                    constants::ffmpeg_push_command.c_str(), width, height, fps, ss.str().c_str());
-                                LOG_F(INFO, "Save command: %s", ss.str().c_str());
-                                fpt = popen(save_command, "w");
-                                if (deal_func != nullptr) {
-                                    deal_func(&ss);
+                    if (contour_list.find(name) != contour_list.end()) {
+                        auto time_gap = std::chrono::duration_cast<std::chrono::milliseconds>(time_now - time_point);
+                        if (time_gap.count() > into_recoder_time_gap) {
+                            if (!video_writer.isOpened()) {
+                                if (resource_dir != "") {
+                                    time_t now = std::chrono::system_clock::to_time_t(time_now);
+                                    video_save_path << resource_dir << "/" 
+                                       << std::put_time(localtime(&now), constants::file_time_format.c_str())
+                                       << ".mp4";
+                                    video_writer.open(video_save_path.str(), video_type, fps, frame.size());
+                                    if (deal_func != nullptr) {
+                                        deal_func(&video_save_path);
+                                    }
                                 }
                             }
+                            is_in_contour[name] = true;
+                            into_erase_key.emplace_back(name);
                         }
-                        is_in_contour[name] = true;
+                    } else {
                         out_contour_time_point.erase(name);
+                        is_in_contour.erase(name);
                     }
                 }
 
+                for (auto & name : into_erase_key) {
+                    into_contour_time_point.erase(name);
+                }
+
+                std::vector<std::string> out_erase_key = {};
                 for (auto & item : out_contour_time_point) {
                     auto & name = item.first;
                     auto & time_point = item.second;
@@ -433,33 +458,45 @@ namespace GLCC{
                     if (time_gap.count() > out_recoder_time_gap) {
                         is_in_contour.erase(name);
                         into_contour_time_point.erase(name);
+                        out_erase_key.emplace_back(name);
                     }
                 }
 
-                if (is_in_contour.size() == 0) {
-                    if (fpt != nullptr) {
-                        pclose(fpt);
-                        fpt = nullptr;
-                    }
+                for (auto & name : out_erase_key) {
+                    out_contour_time_point.erase(name);
                 }
 
                 for (auto & item : contour_list) {
-                    cv::Scalar color = {255, 255, 0};
-                    if (is_in_contour.find(item.first) != is_in_contour.end()) {
-                        cv::Mat tmp{frame.cols, frame.rows, CV_8UC3, cv::Scalar(0)};
-                        cv::fillPoly(tmp, item.second, color, 8);
-                        cv::addWeighted(frame, 0.7, tmp, 0.3, 0, frame);
+                    cv::Scalar color = {0, 0, 255};
+                    auto & name = item.first;
+                    auto & contour = item.second;
+                    if (is_in_contour.find(name) != is_in_contour.end()) {
+                        cv::Mat tmp{frame.rows, frame.cols, CV_8UC3, cv::Scalar(0)};
+                        cv::fillPoly(tmp, contour, color, 8);
+                        cv::addWeighted(frame, 0.8, tmp, 0.2, 0, frame);
                     } else {
-                        cv::polylines(frame, item.second, true, color, 3);
+                        cv::polylines(frame, contour, true, color, 3);
                     }
                 }
 
-                if (fpt != nullptr) {
-                    ret = fwrite(frame.data, sizeof(char), frame.total() * frame.elemSize(), fpt);
-                    if (ret <= 0) {
-                        LOG_F(ERROR, "Write save pipe failed!");
-                        state = -1;
-                        break;
+                if (video_writer.isOpened()) {
+                    video_writer.write(frame);
+                }
+
+                if (is_in_contour.size() == 0) {
+                    if (video_writer.isOpened()) {
+                        video_writer.release();
+                        std::unordered_map<std::string, std::string> path_parse_results = {};
+                        int ret = parse_path(video_save_path.str(), path_parse_results);
+                        if (ret == -1) {
+                            LOG_F(WARNING, "[TrackerDetector][Runner] Save cover path fail!");
+                        } else {
+                            auto & dirname = path_parse_results["dirname"];
+                            auto & stem = path_parse_results["stem"];
+                            std::string cover_save_path = dirname + "/" + stem + "." + constants::cover_save_suffix;
+                            std::string command = "ffmpeg -y -i " + video_save_path.str() + " -ss 1 -frames:v 1 " + cover_save_path;
+                            system(command.c_str());
+                        }
                     }
                 }
             }
@@ -475,13 +512,26 @@ namespace GLCC{
                 if (cv::waitKey(10) == ESC) break ;
             }
         }
+
         if (cancel_func != nullptr) {
             cancel_func(nullptr);
         }
         capture.release();
         cv::destroyAllWindows();
-        if (fpt != nullptr) {
-            pclose(fpt);
+
+        if (video_writer.isOpened()) {
+            video_writer.release();
+            std::unordered_map<std::string, std::string> path_parse_results = {};
+            int ret = parse_path(video_save_path.str(), path_parse_results);
+            if (ret == -1) {
+                LOG_F(WARNING, "[TrackerDetector][Runner] Save cover path fail!");
+            } else {
+                auto & dirname = path_parse_results["dirname"];
+                auto & stem = path_parse_results["stem"];
+                std::string cover_save_path = dirname + "/" + stem + "." + constants::cover_save_suffix;
+                std::string command = "ffmpeg -y -i " + video_save_path.str() + " -ss 1 -frames:v 1 " + cover_save_path;
+                system(command.c_str());
+            }
         }
         pclose(fp);
         return state;
