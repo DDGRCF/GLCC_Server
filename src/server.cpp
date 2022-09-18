@@ -442,8 +442,7 @@ namespace GLCC {
                     user_name.c_str(), video_name.c_str(), room_name.c_str(), error);
             }
         });
-        *series_of(task) << go_task;
-        // go_task->start();
+        go_task->start();
         LOG_F(INFO, "[SERVER][DECT_VIDEO_FILE][%s][%s] Push Command: %s", 
             user_name.c_str(), video_name.c_str(), push_file_command);
         root["room_name"] = room_name;
