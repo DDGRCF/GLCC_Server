@@ -40,10 +40,11 @@
 
 ## 服务器
 
-![服务器预览](/asserts/Peek%202022-09-18%2021-36.gif)
+![serverInstance](/asserts/serverInstance.gif)
 
 ## 客服端
-<img src="./asserts/clientInstanceSplash.jpg" width="190" height = "" alt="server-Instance"/>  <img src="./asserts/clientInstanceLogin.jpg" width="190" height = "" alt="server-Instance"/>  <img src="./asserts/clientInstanceRegister.jpg" width="190" height = "" alt="server-Instance"/>  <img src="./asserts/clientInstanceMain.jpg" width="190" height = "" alt="server-Instance"/>
+<img src="./asserts/clientInstanceSplash.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstanceLogin.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstanceRegister.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstance.gif" width="190" height = "411" alt="server-Instance"/>
+
 
 # 安装
 ### 环境依赖
