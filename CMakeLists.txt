@@ -20,9 +20,6 @@ endif()
 set(MMDeploy_DIR /home/r/Scripts/Python/mmdeploy/build/install/lib/cmake/MMDeploy)
 find_package(MMDeploy REQUIRED)
 
-# ffmpeg
-include_directories(/usr/local/ffmpeg/include)
-
 # custom
 include_directories(${PROJECT_SOURCE_DIR}/include)
 aux_source_directory(${PROJECT_SOURCE_DIR}/src DIR_SRCS)
@@ -36,7 +33,7 @@ find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIRS})
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR})
-set(EXTRA_LIBS ${EXTRA_LIBS}  avcodec avformat avutil swresample swscale jsoncpp workflow bytetrack)
+set(EXTRA_LIBS ${EXTRA_LIBS} jsoncpp workflow bytetrack)
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE -Wl,--disable-new-dtags)
 mmdeploy_load_static(${CMAKE_PROJECT_NAME} MMDeployStaticModules)

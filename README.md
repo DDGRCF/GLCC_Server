@@ -13,8 +13,11 @@
 # Cat Cat | MMDeply $\times$ GLCC 开源项目 | MMDeploy 实践
 
 <p align="center">
-    <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/build-test-red' alt="Build Status"></a>  
-    <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/role-server-green'></a>
+    <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/system-linux-blue' alt="System"></a>  
+    &nbsp;
+    <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/role-server-green' alt="Role"></a>
+    &nbsp;
+    <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/build-test-red' alt="Build"></a>  
 </p>
 
 # 介绍
@@ -29,7 +32,7 @@
 
 目前，该项目包括两个部分:
 
-* <u>**能够响应Http请求，完成检测跟踪的服务器**&emsp;⬅️️️(**目前位置**)</u>
+* **能够响应Http请求，完成检测跟踪的服务器**⬅️️️ **(目前位置)**
 * [能够发起Http请求，完成实现播放的客服端](https://github.com/DDGRCF/GLCC_AndroidApplication)
 
 
@@ -37,7 +40,7 @@
 
 ## 服务器
 
-<img src="./asserts/serverInstance.png" width="" height = "" alt="server-Instance" align=center/>
+![服务器预览](/asserts/Peek%202022-09-18%2021-36.gif)
 
 ## 客服端
 <img src="./asserts/clientInstanceSplash.jpg" width="190" height = "" alt="server-Instance"/>  <img src="./asserts/clientInstanceLogin.jpg" width="190" height = "" alt="server-Instance"/>  <img src="./asserts/clientInstanceRegister.jpg" width="190" height = "" alt="server-Instance"/>  <img src="./asserts/clientInstanceMain.jpg" width="190" height = "" alt="server-Instance"/>
@@ -45,14 +48,35 @@
 # 安装
 ### 环境依赖
 * **MMDeploy** ➡️ [点击进入](https://github.com/open-mmlab/mmdeploy.git)
-* **Workflow** ➡️ [点击进入](https://github.com/sogou/workflow/blob/master)
+* **Workflow** ➡️ [点击进入](https://github.com/sogou/workflow/blob/master) 
 * **Eigen** ➡️ [点击进入](https://eigen.tuxfamily.org/index.php?title=Main_Page)
 * **FFmpeg** ➡️ [点击进入](https://ffmpeg.org/)
+* **Mysql** ➡ [点击进入](https://www.mysql.com/)
+* **JsonCpp** ➡ [点击进入](https://github.com/open-source-parsers/jsoncpp) 
 ### 安装命令
+上面的依赖根据都具有详细的安装文档，再安装完所有依赖后，进行下面的操作:
+
+1. 设置相关变量
 ```bash
-mkdir -p build && cd build && cmake ..
+MMDeploy_DIR=/path/to/your/mmdeploy/install
+e.g. MMDeploy_DIR=mmdeploy/build/install/cmake/MMDeploy
+
+OpenCV_DIR=/path/to/your/opencv/install
+e.g. OpenCV_DIR=/usr/local/opencv/lib/cmake/opencv4
+
+DEigen3_DIR=/path/to/your/Eigen/install
+e.g. DEigen3_DIR=/usr/local/eign/share/eigen3/cmake
+```
+
+2. 生成MakeFile
+```bash
+mkdir -p build && cd build && cmake .. -DMMDeploy_DIR=${MMDeploy_DIR} -DOpencv_DIR=${Opencv_DIR} -DEigen3_DIR=${Eigen3_DIR}
+```
+3. 编译
+```bash
 make -j8
 ```
+
 # 开源许可证
 本项目采用 [MIT](./LICENSE) 开源许可证
 
@@ -66,3 +90,4 @@ make -j8
 * [loguru](https://github.com/emilk/loguru)
 * [Eigen](https://gitlab.com/libeigen/eigen)
 * [FFmpeg](https://github.com/FFmpeg/FFmpeg)
+* [JsonCpp](https://github.com/open-source-parsers/jsoncpp)
