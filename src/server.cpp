@@ -234,9 +234,10 @@ namespace GLCC {
                                                     }
                                                     set_common_resp(up_resp, "200", "OK");
                                                     up_resp->append_output_body(reply.toStyledString());
-                                                    char user_dir[256];
-                                                    std::snprintf(user_dir, sizeof(user_dir), "%s/%s", work_dir.c_str(), user_name.c_str());
-                                                    check_dir(user_dir, true);
+                                                    std::string user_dir = work_dir + "/" + user_name;
+                                                    std::string user_custom_dir = user_dir + "/" + "custom";
+                                                    check_dir(user_dir.c_str(), true);
+                                                    check_dir(user_custom_dir.c_str(), true);
                                                     LOG_F(INFO, "[SERVER][LOGIN][%s] Login success!", user_name.c_str());
                                                 } else {
                                                     set_common_resp(up_resp, "200", "OK");
@@ -441,8 +442,8 @@ namespace GLCC {
                     user_name.c_str(), video_name.c_str(), room_name.c_str(), error);
             }
         });
-        // *series_of(task) << go_task;
-        go_task->start();
+        *series_of(task) << go_task;
+        // go_task->start();
         LOG_F(INFO, "[SERVER][DECT_VIDEO_FILE][%s][%s] Push Command: %s", 
             user_name.c_str(), video_name.c_str(), push_file_command);
         root["room_name"] = room_name;
@@ -1007,28 +1008,22 @@ namespace GLCC {
 
         if (register_detector(room_name,
                 dect_context, Judge_Register) == nullptr) {
-            cv::VideoCapture capture;
-            int ret = capture.open(video_url);
-            capture.release();
-            if (ret) {
-                WFGoTask * go_run_task = WFTaskFactory::create_go_task(
-                    "detector_run", run_detector, dect_context->livego_context.room_name, dect_context);
-                go_run_task->set_callback([dect_context, user_name, video_name](WFGoTask * task) {
-                    std::string & room_name = dect_context->livego_context.room_name;
-                    LOG_F(INFO, "[SERVER][DECT][%s][%s][%s] Detect task finish!", 
-                        user_name.c_str(), video_name.c_str(), room_name.c_str());
-                });
-                go_run_task->start();
-                set_common_resp(resp, "200", "OK");
-                Json::Value reply;
-                reply["room_name"] = room_name;
-                // TODO: append body nocopy
-                resp->append_output_body(reply.toStyledString());
-            } else {
-                set_common_resp(resp, "400", "Bad Request");
-                LOG_F(ERROR, "[SERVER][DECT][%s][%s][%s] URL: %s invalidate", 
-                    user_name.c_str(), video_name.c_str(), room_name, video_url.c_str());
-            }
+            // cv::VideoCapture capture;
+            // int ret = capture.open(video_url);
+            // capture.release();
+            WFGoTask * go_run_task = WFTaskFactory::create_go_task(
+                "detector_run", run_detector, dect_context->livego_context.room_name, dect_context);
+            go_run_task->set_callback([dect_context, user_name, video_name](WFGoTask * task) {
+                std::string & room_name = dect_context->livego_context.room_name;
+                LOG_F(INFO, "[SERVER][DECT][%s][%s][%s] Detect task finish!", 
+                    user_name.c_str(), video_name.c_str(), room_name.c_str());
+            });
+            go_run_task->start();
+            set_common_resp(resp, "200", "OK");
+            Json::Value reply;
+            reply["room_name"] = room_name;
+            // TODO: append body nocopy
+            resp->append_output_body(reply.toStyledString());
         } else {
             set_common_resp(resp, "200", "OK");
             Json::Value reply;
@@ -1037,7 +1032,6 @@ namespace GLCC {
         }
     }
 
-    // TODO: manager again
     void GLCCServer::disdect_video_callback(WFHttpTask * task, void * context) {
         protocol::HttpRequest * req = task->get_req();
         protocol::HttpResponse * resp = task->get_resp();
@@ -1258,9 +1252,9 @@ namespace GLCC {
             return;
         }
         if (!root.isMember("video_name") || !root.isMember("contour_name") || !root.isMember("contour_path")) {
+            set_common_resp(resp, "400", "Bad Request");
             LOG_F(ERROR, "[SERVER][PUT_LATTICE][%s] Find request bdoy key: %s, %s, %s fail!", user_name.c_str(), 
                 "video_name", "contour_name", "contour_path");
-            set_common_resp(resp, "400", "Bad Request");
             return;
         }
 
@@ -1770,8 +1764,6 @@ namespace GLCC {
         std::string video_name = context->video_context.video_name.c_str();
         std::string user_name = context->extra_info["user_name"].asString();
         auto & user_dir = context->server_dir.user_dir;
-        // char video_dir[256];
-        // std::snprintf(video_dir, sizeof(video_dir), "%s/%s", user_dir.c_str(), video_name.c_str());
         std::string video_dir = user_dir + "/" + video_name;
         Detector * detector = register_detector(room_name, context, Create_Register);
         if (context->state == WFT_STATE_TASK_ERROR) {
@@ -2111,6 +2103,7 @@ namespace GLCC {
         resp->add_header_pair("Server", "GLCC Server Implemented by WorkFlow");
         return resp;
     }
+
     protocol::HttpRequest * GLCCServer::set_common_req(protocol::HttpRequest * req, 
                                       std::string accept, 
                                       std::string status,

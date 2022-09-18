@@ -130,8 +130,8 @@ namespace GLCC{
             extra_config.toStyledString().c_str());
 
         // time to recorder
-        int into_recoder_time_gap = into_contour_time_gap_second * constants::num_millisecond_per_second;
-        int out_recoder_time_gap = out_contour_time_gap_second * constants::num_millisecond_per_second;
+        int into_recoder_time_gap = into_contour_time_gap_second * 1000;
+        int out_recoder_time_gap = out_contour_time_gap_second * 1000;
         std::unordered_map<std::string, bool> is_in_contour = {};
         std::unordered_map<std::string, std::chrono::system_clock::time_point> into_contour_time_point = {};
         std::unordered_map<std::string, std::chrono::system_clock::time_point> out_contour_time_point = {};
@@ -177,7 +177,7 @@ namespace GLCC{
                 for (auto & item: contour_list) {
                     auto & name = item.first;
                     auto & contour = item.second;
-                    int ret = 0;
+                    int ret = -1;
                     for (auto & object : objects) {
                         auto tl = object.rect.tl(); auto br = object.rect.br();
                         auto ctr = (tl + br) / 2;
@@ -211,6 +211,8 @@ namespace GLCC{
                             if (!video_writer.isOpened()) {
                                 if (resource_dir != "") {
                                     time_t now = std::chrono::system_clock::to_time_t(time_now);
+                                    video_save_path.clear();
+                                    video_save_path.str("");
                                     video_save_path << resource_dir << "/" 
                                        << std::put_time(localtime(&now), constants::file_time_format.c_str())
                                        << ".mp4";
@@ -291,7 +293,7 @@ namespace GLCC{
                 break;
             }
             if (imshow_result_image) {
-                cv::imshow("frame of video", frame);
+                cv::imshow(video_path, frame);
                 if (cv::waitKey(10) == ESC) break ;
             }
         }
@@ -451,8 +453,8 @@ namespace GLCC{
         int num_frames = 0;
 
         // time to recorder
-        int into_recoder_time_gap = into_contour_time_gap_second * constants::num_millisecond_per_second;
-        int out_recoder_time_gap = out_contour_time_gap_second * constants::num_millisecond_per_second;
+        int into_recoder_time_gap = into_contour_time_gap_second * 1000;
+        int out_recoder_time_gap = out_contour_time_gap_second * 1000;
         std::unordered_map<std::string, bool> is_in_contour = {};
         std::unordered_map<std::string, std::chrono::system_clock::time_point> into_contour_time_point = {};
         std::unordered_map<std::string, std::chrono::system_clock::time_point> out_contour_time_point = {};
@@ -485,12 +487,14 @@ namespace GLCC{
             }
 
             std::vector<STrack> stracks = tracker.update(objects);
+            std::vector<STrack> stracks_show;
 
             for (auto & strack : stracks) {
                 auto & tlwh = strack.tlwh;
                 auto xyah = strack.to_xyah();
                 bool wh_ratio = tlwh[2] / tlwh[3] > wh_ratio_thre_to_show;
                 if (tlwh[2] * tlwh[3] > wh_multiply_thre_to_show && !wh_ratio) {
+                    stracks_show.emplace_back(strack);
                     Scalar color = tracker.get_color(strack.track_id);
                     cv::putText(frame, cv::format("id:%d: %.3f", strack.track_id, strack.score), cv::Point(tlwh[0], tlwh[1] - 5),
                         0, 0.6, cv::Scalar(0, 0, 255), 2, LINE_AA);
@@ -504,11 +508,11 @@ namespace GLCC{
                 for (auto & item: contour_list) {
                     auto & name = item.first;
                     auto & contour = item.second;
-                    int ret = 0;
-                    for (auto & strack : stracks) {
+                    int ret = -1;
+                    for (auto & strack : stracks_show) {
                         auto xyah = strack.to_xyah();
-                        cv::Point center_point(xyah[0], xyah[1]);
-                        ret = cv::pointPolygonTest(contour, center_point, false);
+                        cv::Point ctr(xyah[0], xyah[1]);
+                        ret = cv::pointPolygonTest(contour, ctr, false);
                         if (ret >= 0) {
                             break;
                         }
@@ -538,11 +542,13 @@ namespace GLCC{
                             if (!video_writer.isOpened()) {
                                 if (resource_dir != "") {
                                     time_t now = std::chrono::system_clock::to_time_t(time_now);
+                                    video_save_path.clear();
+                                    video_save_path.str("");
                                     video_save_path << resource_dir << "/" 
                                        << std::put_time(localtime(&now), constants::file_time_format.c_str())
                                        << ".mp4";
                                     video_writer.open(video_save_path.str(), video_type, fps, frame.size());
-                                    if (deal_func != nullptr) {
+                                    if (deal_func != nullptr && video_writer.isOpened()) {
                                         deal_func(&video_save_path);
                                     }
                                 }
@@ -618,7 +624,7 @@ namespace GLCC{
                 break;
             }
             if (imshow_result_image) {
-                cv::imshow("frame of video", frame);
+                cv::imshow(video_path, frame);
                 if (cv::waitKey(10) == ESC) break ;
             }
         }

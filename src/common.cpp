@@ -4,7 +4,7 @@
 namespace GLCC {
     namespace constants {
         const std::string localhost="127.0.0.1";
-        // time
+        // time TODO: more reasonable
         const long num_millisecond_per_second = 1000;
         const long num_microsecond_per_second = num_millisecond_per_second * 1000;
         const long num_second_per_minute = num_microsecond_per_second * 60;

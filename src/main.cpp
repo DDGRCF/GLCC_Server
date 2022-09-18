@@ -38,7 +38,7 @@ int main(int argc, char ** argv)
     const int camera_push_port = livego_root["camera_push_port"].asInt();
     const int dect_push_port = livego_root["dect_push_port"].asInt();
     const int state_check_port = livego_root["state_check_port"].asInt();
-    GLCC::constants::video_path_template = "rstp://" + GLCC::constants::localhost \
+    GLCC::constants::video_path_template = "rtsp://" + GLCC::constants::localhost \
         + ":" + std::to_string(camera_push_port) + "/live/%s";
     GLCC::constants::livego_push_url_template = "rtmp://" + GLCC::constants::localhost \
         + ":" + std::to_string(dect_push_port) + "/live/%s";
