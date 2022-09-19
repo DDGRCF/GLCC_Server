@@ -49,12 +49,13 @@
 
 # 安装与运行
 ### 环境依赖
-* **MMDeploy** ➡️ [点击进入](https://github.com/open-mmlab/mmdeploy.git)
-* **Workflow** ➡️ [点击进入](https://github.com/sogou/workflow/blob/master) 
-* **Eigen** ➡️ [点击进入](https://eigen.tuxfamily.org/index.php?title=Main_Page)
-* **FFmpeg** ➡️ [点击进入](https://ffmpeg.org/)
-* **Mysql** ➡ [点击进入](https://www.mysql.com/)
-* **JsonCpp** ➡ [点击进入](https://github.com/open-source-parsers/jsoncpp) 
+* **MMDeploy**(OpenMMLab下部署工作包) ➡️ [点击进入](https://github.com/open-mmlab/mmdeploy.git)
+* **Workflow**(基于C/C++致力于高性能服务器开发的库) ➡️ [点击进入](https://github.com/sogou/workflow/blob/master) 
+* **Eigen**(C/C++的矩阵计算库) ➡️ [点击进入](https://eigen.tuxfamily.org/index.php?title=Main_Page)
+* **FFmpeg**(包含视频、音频处理工具包和开发库) ➡️ [点击进入](https://ffmpeg.org/)
+* **Mysql**(开放源码的数据库) ➡ [点击进入](https://www.mysql.com/)
+* **JsonCpp**(基于C/C++的Json格式解析库) ➡ [点击进入](https://github.com/open-source-parsers/jsoncpp) 
+* **Lal**(基于Go开发的高性能流服务器) ➡ [点击进入](https://github.com/q191201771/lal)
 ### 安装命令
 上面的依赖根据都具有详细的安装文档，再安装完所有依赖后，进行下面的操作:
 
@@ -79,6 +80,7 @@ mkdir -p build && cd build && cmake .. -DMMDeploy_DIR=${MMDeploy_DIR} -DOpencv_D
 make -j8
 ```
 ### 运行命令
+运行之前请确保Lal流服务器以及Mysql数据服务器启动
 ```bash
 cd build
 config=/path/your/config # it just put in configs/configs.json
