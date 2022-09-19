@@ -2,13 +2,13 @@
     "Server": {
         "server_ip": "0.0.0.0" ,   
         "server_port": 9999,
-        "work_dir": "/home/r/Scripts/C++/GLCC_Server/work_dir",
-        "resource_dir": "/home/r/Scripts/C++/GLCC_Server/resource",
-        "ssl_crt_path": "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server.crt",
-        "ssl_key_path": "/home/r/Scripts/C++/New_GLCC_Server/.ssl/test/server_rsa_private.pem.unsecure"
+        "work_dir": "/path/your/work_dir",
+        "resource_dir": "/path/your/resource",
+        "ssl_crt_path": "/path/your/server.crt",
+        "ssl_key_path": "/path/your/server_rsa_private.pem.unsecure"
     },
     "Log": {
-        "log_dir": "/home/r/Scripts/C++/GLCC_Server/log",
+        "log_dir": "/path/your/log",
         "log_file_time_format": "%Y-%m-%d_%H:%M:%S",
         "log_add_file_verbosity": "INFO",
         "log_all_file_verbosity": "INFO"
@@ -16,7 +16,7 @@
     "Detector": {
         "mode": "TrackerDetector",
         "ObjectDetector": {
-            "model": "/home/r/Scripts/C++/GLCC_Server/models/yolox_tiny_cat_dynamic_fp16_trt",
+            "model": "/path/to/your/model",
             "device": "cuda",
             "device_id": 0,
             "extra_config": {
@@ -28,7 +28,7 @@
             }
         },
         "TrackerDetector": {
-            "model": "/home/r/Scripts/C++/GLCC_Server/models/yolox_tiny_cat_dynamic_fp16_trt",
+            "model": "/path/your/model",
             "device": "cuda",
             "device_id": 0,
             "extra_config": {

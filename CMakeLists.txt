@@ -2,12 +2,8 @@ cmake_minimum_required(VERSION 3.22)
 project(glcc_server)
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 14)
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall --std=c++11 -D__STDC_CONSTANT_MACROS")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -fconcepts --std=c++14")
-# for log
-# add_definitions(-DLOGURU_WITH_STREAMS -DLOGURU_REPLACE_GLOG)
 
-set(OpenCV_DIR /usr/local/opencv/lib/cmake/opencv4)
 find_package(OpenCV REQUIRED)
 include_directories($(OpenCV_INCLUDE_DIRS))
 set(EXTRA_LIBS ${EXTRA_LIBS} ${OpenCV_LIBS})
@@ -17,7 +13,6 @@ if (FOUND_OpenCV)
 endif()
 
 # mmdeploy
-set(MMDeploy_DIR /home/r/Scripts/Python/mmdeploy/build/install/lib/cmake/MMDeploy)
 find_package(MMDeploy REQUIRED)
 
 # custom

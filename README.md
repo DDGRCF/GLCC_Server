@@ -1,16 +1,3 @@
-<div>&nbsp;</div>
-<div align="center">
-
-<div>
-<img src="./asserts/logoWithText.png" width = "488" height = "159" alt="logo-catcat" align=center />
-</div>
-<div>&nbsp;</div>
-<div>
-<img src="./asserts/gitlink&&mmdeploy.png" width="" height = "40" alt="logo-mmdeply&&gitlink" align=center/>
-</div>
-</div>
-
-# Cat Cat | MMDeply $\times$ GLCC 开源项目 | MMDeploy 实践
 
 <p align="center">
     <a href='https://github.com/DDGRCF/GLCC_Server'><img src='https://img.shields.io/badge/system-linux-blue' alt="System"></a>  
@@ -46,7 +33,7 @@
 <img src="./asserts/clientInstanceSplash.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstanceLogin.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstanceRegister.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstance.gif" width="190" height = "411" alt="server-Instance"/>
 
 
-# 安装
+# 安装与运行
 ### 环境依赖
 * **MMDeploy** ➡️ [点击进入](https://github.com/open-mmlab/mmdeploy.git)
 * **Workflow** ➡️ [点击进入](https://github.com/sogou/workflow/blob/master) 
@@ -76,6 +63,12 @@ mkdir -p build && cd build && cmake .. -DMMDeploy_DIR=${MMDeploy_DIR} -DOpencv_D
 3. 编译
 ```bash
 make -j8
+```
+### 运行命令
+```bash
+cd build
+config=/path/your/config # it just put in configs/configs.json
+SPDLOG_LEVEL=error ./glcc_server ${config}
 ```
 
 # 开源许可证

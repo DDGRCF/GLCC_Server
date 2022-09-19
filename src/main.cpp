@@ -6,7 +6,7 @@
 
 int main(int argc, char ** argv)
 {
-    std::string config_path = "/home/r/Scripts/C++/GLCC_Server/configs/config.json";
+    std::string config_path = argv[1];
     loguru::init(argc, argv);
     Json::Value config_root; Json::Reader reader;
 
