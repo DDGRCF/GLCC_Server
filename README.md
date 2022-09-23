@@ -38,7 +38,7 @@ Cat Cat | MMDeply $\times$ GLCC 开源项目 | MMDeploy 实践
 
 目前，该项目包括两个部分:
 
-* **能够响应Http请求，完成检测跟踪的服务器** 👈 **(目前位置)**
+* **能够响应Http请求，完成检测跟踪的服务器** 👈 **目前位置**
 * [能够发起Http请求，完成实现播放的客服端](https://github.com/DDGRCF/GLCC_AndroidApplication)
 
 **✨服务器目前支持的功能:**
@@ -75,7 +75,8 @@ Cat Cat | MMDeply $\times$ GLCC 开源项目 | MMDeploy 实践
 
 
 # 工作流程
-![glccWorkflow](/asserts/glccWorkflow.png)
+<img src="./asserts/glccWorkflow.png" width="800" alt="glcc-workflow"/>
+
 # 安装与运行
 ### 环境依赖
 * **MMDeploy**(OpenMMLab下部署工作包) ➡️ [点击进入](https://github.com/open-mmlab/mmdeploy.git)
