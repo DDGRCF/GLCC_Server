@@ -131,3 +131,7 @@ SPDLOG_LEVEL=error ./glcc_server ${config}
 * [Eigen](https://gitlab.com/libeigen/eigen)
 * [FFmpeg](https://github.com/FFmpeg/FFmpeg)
 * [JsonCpp](https://github.com/open-source-parsers/jsoncpp)
+
+
+# 技术交流
+<img src="./asserts/weixing.jpg" width="200" alt="weixing"/>
