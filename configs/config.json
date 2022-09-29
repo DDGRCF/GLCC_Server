@@ -3,7 +3,6 @@
         "server_ip": "0.0.0.0" ,   
         "server_port": 9999,
         "work_dir": "/path/your/work_dir",
-        "resource_dir": "/path/your/resource",
         "ssl_crt_path": "/path/your/server.crt",
         "ssl_key_path": "/path/your/server_rsa_private.pem.unsecure"
     },
