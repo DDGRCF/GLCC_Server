@@ -37,7 +37,7 @@ Cat Cat | MMDeply $\times$ GLCC 开源项目 | MMDeploy 实践
 * 能够对猫猫进行检测和跟踪，并将检测结果进行推流，可通过手机App播放
 * 能够对猫猫进行划线检测，对于猫猫进入一定区域的时间点的视频进行记录并推送给用户
 
-实际上通过简单的修改配置文件，能够很容易将本服务拓展到其他宠物的检测识别、跟踪服务，后面将会介绍如何修改配置文件
+实际上通过简单的修改配置文件，能够很容易将本服务拓展到其他宠物的检测识别、跟踪服务，请根据<a href="#serverconfig">后面章节</a>修改[配置文件](configs/config.json)
 
 目前，该项目包括两个部分:
 
@@ -69,18 +69,21 @@ Cat Cat | MMDeply $\times$ GLCC 开源项目 | MMDeploy 实践
 
 # 预览
 
-## 服务器
+## <a id="serverpreview">服务器</a>
 
 ![serverInstance](/asserts/serverInstance.gif)
 
-## 客服端
+## <a id="clientpreview">客服端</a>
 <img src="./asserts/clientInstanceSplash.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstanceLogin.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstanceRegister.jpg" width="190" height = "411" alt="server-Instance"/>  <img src="./asserts/clientInstance.gif" width="190" height = "411" alt="server-Instance"/>
 
 
 ## 说明
-|  <div align="center">✨**服务端**✨</div>           |  <div align="center">✨**客户端**✨</div>          |
-| -------------------- | -------------------- | 
-| 在上面的预览中，我们可以看到服务端运行后，(在客服端发送播放后)跳出来了一个视频界面，视频上两只猫猫被检测出来，并进行了跟踪。另外，我们可以注意到，外面有一个不规则的红色的框。这红色框就代表我们预先设置的栅栏，围栏之类的。猫猫进入了该区域就代表进入了危险区域，那么该红色框就变为实心，并发送通知给用户。这里为了方便演示，我直接将危险框放置在目标中心。值得一提的是，只有猫猫在该区域待够一定时间(可通过配置文件修改)，服务器才会将猫猫识别为进入该危险区域 |  在上面的预览中，我们可以看到在客服端登录后，客服端向服务器发送一个拉流请求并播放相关视频(视频播放界面的纵横比为4/3，如果拉取视频流的纵横比大于或小于这个尺寸，会使用灰色进行填充)，视频下有一个工具栏，工具栏上有**REGISTER**、**DELETE**、**DRAW**、**SOURCE**等字样，分别代表视频流的注册，视频流的删除，放置边界框(栅栏，围栏之类)，目前的播放源功能的按钮(可通过旁边的下拉栏可切换播放源)。然后工具栏下面，有一个可滑动的视频栏目，这个视频栏目就猫猫进入危险时所记录的视频，点击每一个视频栏目可实现视频的播放 dasfsadfasdfsadfsadf |
+
+|    <div align="center"> 类型 </div>   |  <div align="center">说明 </div>                                                                                                                                                                                                                                                                                  |
+|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <div align="center">**服务端**</div> | 在<a href="#serverpreview">上面</a>的预览中，我们可以看到服务端运行后，(在客服端发送播放后)跳出来了一个视频界面，视频上两只猫猫被检测出来，并进行了跟踪。另外，我们可以注意到，外面有一个不规则的红色的框。这红色框就代表我们预先设置的栅栏，围栏之类的。猫猫进入了该区域就代表进入了危险区域，那么该红色框就变为实心，并发送通知给用户。这里为了方便演示，我直接将危险框放置在目标中心。值得一提的是，只有猫猫在该区域待够一定时间(可通过配置文件修改)，服务器才会将猫猫识别为进入该危险区域                                                 |
+| <div align="center">**客户端**</div> | 在<a href="#clientpreview">上面</a>的预览中，我们可以看到在客服端登录后，客服端向服务器发送一个拉流请求并播放相关视频(视频播放界面的纵横比为4/3，如果拉取视频流的纵横比大于或小于这个尺寸，会使用灰色进行填充)，视频下有一个工具栏，工具栏上有**REGISTER**、**DELETE**、**DRAW**、**SOURCE**等字样，分别代表视频流的注册，视频流的删除，放置边界框(栅栏，围栏之类)，目前的播放源功能的按钮(可通过旁边的下拉栏可切换播放源)。然后工具栏下面，有一个可滑动的视频栏目，这个视频栏目就猫猫进入危险时所记录的视频，点击每一个视频栏目可实现视频的播放 |
+
 
 
 # 工作流程
@@ -119,25 +122,25 @@ mkdir -p build && cd build && cmake .. -DMMDeploy_DIR=${MMDeploy_DIR} -DOpencv_D
 make -j$(nproc)
 ```
 ### 运行命令
-运行之前请确保Lal流服务器以及Mysql数据服务器启动
+运行之前请确保Lal流服务器以及Mysql数据服务器启动，并按照<a href="#serverconfig">章节</a>修改配置
 ```bash
 cd build
 config=/path/your/config # it just put in configs/configs.json
 SPDLOG_LEVEL=error ./glcc_server ${config}
 ```
 
-# 服务器配置
+# <a id="serverconfig">服务器配置</a>
 ```json
 {
     "Server": {
         "server_ip": "0.0.0.0",  // 服务器的IP地址  
         "server_port": 9999, // 服务器的Port
-        "work_dir": "/path/your/work_dir", // 服务器的工作目录，用于储存用户资源
-        "ssl_crt_path": "/path/your/server.crt", // ssl 证书路径
-        "ssl_key_path": "/path/your/server_rsa_private.pem.unsecure" // ssl 私钥路径
+        "work_dir": "work_dir", // 服务器的工作目录，用于储存用户资源[default: ./work_dir]
+        "ssl_crt_path": "/path/your/server.crt", // ssl 证书路径[must]
+        "ssl_key_path": "/path/your/server_rsa_private.pem.unsecure" // ssl 私钥路径[must]
     },
     "Log": {
-        "log_dir": "/path/your/log", // log保存的目录
+        "log_dir": "log", // log保存的目录[default: ./log]
         "log_file_time_format": "%Y-%m-%d_%H:%M:%S", // log保存的格式
         "log_add_file_verbosity": "INFO", // 新的log保存的等级
         "log_all_file_verbosity": "INFO" // 所有log保存的等级
@@ -145,7 +148,7 @@ SPDLOG_LEVEL=error ./glcc_server ${config}
     "Detector": {
         "mode": "TrackerDetector", // Detector的模式，默认为跟踪模式
         "ObjectDetector": { // 检测模型配置
-            "model": "/path/to/your/model", // 模型所在位置
+            "model": "/path/to/your/model", // 模型所在位置[must]
             "device": "cuda",  // 模型运行设备
             "device_id": 0, // 模型运行设备id
             "extra_config": { 
@@ -157,7 +160,7 @@ SPDLOG_LEVEL=error ./glcc_server ${config}
             }
         },
         "TrackerDetector": { // 跟踪模型配置
-            "model": "/path/your/model", // 模型所在位置
+            "model": "/path/your/model", // 模型所在位置[must]
             "device": "cuda", // 模型运行设备
             "device_id": 0, // 模型运行设备id
             "extra_config": {
