@@ -92,7 +92,6 @@ Cat Cat | MMDeply $\times$ GLCC 开源项目 | MMDeploy 实践
 # 安装与运行
 ### 环境依赖
 * **MMDeploy**(OpenMMLab下部署工作包) ➡️ [点击进入](https://github.com/open-mmlab/mmdeploy.git)
-* **Workflow**(基于C/C++致力于高性能服务器开发的库) ➡️ [点击进入](https://github.com/sogou/workflow/blob/master) 
 * **Eigen**(C/C++的矩阵计算库) ➡️ [点击进入](https://eigen.tuxfamily.org/index.php?title=Main_Page)
 * **FFmpeg**(包含视频、音频处理工具包和开发库) ➡️ [点击进入](https://ffmpeg.org/)
 * **Mysql**(开放源码的数据库) ➡ [点击进入](https://www.mysql.com/)
@@ -204,6 +203,7 @@ SPDLOG_LEVEL=error ./glcc_server ${config}
 * [MMDetection](https://github.com/open-mmlab/mmdetection)
 * [YOLOX](https://github.com/Megvii-BaseDetection/YOLOX)
 * [Workflow](https://github.com/sogou/workflow/blob/master)
+* [Lal](https://github.com/q191201771/lal)
 * [MegFlow](https://github.com/MegEngine/MegFlow)
 * [ByteTrack](https://github.com/ifzhang/ByteTrack)
 * [loguru](https://github.com/emilk/loguru)
